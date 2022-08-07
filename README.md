@@ -10,7 +10,7 @@ ported by [**Nicholas Berlette**](https://github.com/nberlette) for Deno.
 ## Usage
 
 ```ts
-import * as is from "https://deno.land/x/dis@0.0.0/mod.ts";
+import * as is from "https://deno.land/x/dis@0.0.1/mod.ts";
 ```
 
 ### Type Checking
@@ -32,7 +32,7 @@ is.number(6);
 if the type does not match.
 
 ```ts
-import { assert } from "https://deno.land/x/dis@0.0.0/mod.ts";
+import { assert } from "https://deno.land/x/dis@0.0.1/mod.ts";
 
 assert.string(2);
 // => Error: Expected value which is `string`, received value of type `number`.
@@ -41,7 +41,7 @@ assert.string(2);
 ### Assertions with TypeScript
 
 ```ts
-import { assert } from "https://deno.land/x/dis@0.0.0/mod.ts";
+import { assert } from "https://deno.land/x/dis@0.0.1/mod.ts";
 
 assert.string(foo);
 // `foo` is now typed as a `string`.
@@ -1011,7 +1011,7 @@ are being used extensively to infer the correct type inside if-else statements.
 ---
 
 ```ts
-import is from "https://deno.land/x/dis@0.0.0/mod.ts";
+import is from "https://deno.land/x/dis@0.0.1/mod.ts";
 const padLeft = (value: string, padding: string | number) => {
   if (is.number(padding)) {
     // `padding` is typed as `number`
@@ -1052,7 +1052,7 @@ of the often repetitive `"if-not-expected-type-throw"` pattern.
 ---
 
 ```ts
-import { assert } from "https://deno.land/x/dis@0.0.0/mod.ts";
+import { assert } from "https://deno.land/x/dis@0.0.1/mod.ts";
 
 const handleMovieRatingApiResponse = (response: unknown) => {
   assert.plainObject(response);
@@ -1105,7 +1105,7 @@ runtime with `is` or `assert`.
 ---
 
 ```ts
-import { assert } from "https://deno.land/x/dis@0.0.0/mod.ts";
+import { assert } from "https://deno.land/x/dis@0.0.1/mod.ts";
 async function badNumberAssumption(input: unknown) {
   // Bad assumption about the generic type parameter fools the compile-time type system.
   assert.promise<number>(input);
