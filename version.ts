@@ -10,12 +10,11 @@ export async function prepublish(version: string) {
     const filename of [
       "README.md",
       "mod.ts",
+      "types.d.ts",
     ]
   ) {
     await bump(filename, version);
   }
-
-  return false;
 }
 
 /** `postpublish` will be invoked after publish */
@@ -29,7 +28,7 @@ export function postpublish(version: string) {
 async function bump(filename: string, version: string) {
   try {
     const module_regex = new RegExp(
-      `(?<=[/"'\s](${MODULE})[@]([{]{1,2}VERSION[}]{1,2}|\$VERSION|[^/"'\s]+)(?=[/"'\s])`,
+      `(?<=[/"'\s])(${MODULE})[@]([{]{1,2}VERSION[}]{1,2}|\$VERSION|[^/"'\s]+)(?=[/"'\s])`,
       "ig",
     );
     const content = await Deno.readTextFile(filename);
