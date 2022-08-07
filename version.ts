@@ -1,22 +1,24 @@
 import * as ansi from "https://deno.land/std@0.151.0/fmt/colors.ts";
 
 /** `VERSION` managed by https://deno.land/x/publish */
-export const VERSION = "0.0.1"
+export const VERSION = "0.0.1";
 export const MODULE = "dis";
 
 /** `prepublish` will be invoked before publish */
 export async function prepublish(version: string) {
-  for (const filename of [
-    "README.md",
-    "mod.ts",
-  ]) {
-    await bump(filename, version)
+  for (
+    const filename of [
+      "README.md",
+      "mod.ts",
+    ]
+  ) {
+    await bump(filename, version);
   }
 
   return false;
 }
 
-/** `prepublish` will be invoked after publish */
+/** `postpublish` will be invoked after publish */
 export function postpublish(version: string) {
   console.log(
     ansi.bgGreen(" SUCCESS "),

@@ -1,17 +1,9 @@
-/**
- * The following file was extracted from @sindresorhus/is, and ported to Deno
- * by Nicholas Berlette.
- *
- * @copyright Sindre Sorhus <https://github.com/sindresorhus>
- * @copyright Nicholas Berlette <https://github.com/nberlette>
- * @see {@link https://github.com/sindresorhus/is}
- * @see {@link https://github.com/deno911/x}
- */
+/// <reference no-default-lib="true" />
+/// <reference lib="esnext" />
 
-// deno-lint-ignore-file ban-types
 import type { Buffer } from "https://deno.land/std@0.151.0/io/buffer.ts";
 
-export declare namespace NodeJS {
+declare namespace NodeJS {
   export type Buffer =
     import("https://deno.land/std@0.151.0/node/buffer.ts").Buffer;
   export type EventEmitter =
@@ -986,7 +978,7 @@ export enum AssertionTypeDescription {
   all = "predicate returns truthy for all values",
 }
 
-export const assert: Assert = {
+const assert: Assert = {
   // Unknowns.
   undefined: (value: unknown): asserts value is undefined =>
     assertType(is.undefined(value), "undefined", value),
@@ -1330,6 +1322,7 @@ Object.defineProperties(is, {
     value: is.null_,
   },
 });
+
 Object.defineProperties(assert, {
   "class": {
     value: assert.class_,
@@ -1342,4 +1335,9 @@ Object.defineProperties(assert, {
   },
 });
 
+Object.defineProperty(is, "assert", {
+  value: assert,
+});
+
+export { assert, is };
 export default is;

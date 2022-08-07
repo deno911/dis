@@ -2,7 +2,8 @@
 
 [![](https://migo.deno.dev/width=1280;height=640;pxRatio=1;bgColor=10141a;icon=deno;iconColor=papayawhip;titleColor=white;subtitleColor=white;iconY=80;iconX=950;titleFontSize=120;titleX=175;titleY=450;subtitleX=420;subtitleY=550;subtitleFontSize=48;titleTextAnchor=left;subtitleTextAnchor=left/dis/https://deno.land/x/dis.png)](https://deno.land/x/dis)
 
-Originally by [**Sindre Sorhus**](https://github.com/sindresorhus/is) for Node, ported by [**Nicholas Berlette**](https://github.com/nberlette) for Deno.
+Originally by [**Sindre Sorhus**](https://github.com/sindresorhus/is) for Node,
+ported by [**Nicholas Berlette**](https://github.com/nberlette) for Deno.
 
 ---
 
@@ -15,7 +16,7 @@ import * as is from "https://deno.land/x/dis@0.0.0/mod.ts";
 ### Type Checking
 
 ```ts
-is('🦕');
+is("🦕");
 // 'string'
 
 is(new Map());
@@ -27,7 +28,8 @@ is.number(6);
 
 ### Assertions
 
-[Assertions](#type-assertions) perform the same type checks, but throw an error if the type does not match.
+[Assertions](#type-assertions) perform the same type checks, but throw an error
+if the type does not match.
 
 ```ts
 import { assert } from "https://deno.land/x/dis@0.0.0/mod.ts";
@@ -45,13 +47,13 @@ assert.string(foo);
 // `foo` is now typed as a `string`.
 ```
 
-
 ## Highlights
 
 - Written in TypeScript, for Deno and Deno Deploy
 - [Extensive use of type guards](#type-guards)
 - [Supports type assertions](#type-assertions)
-- [Aware of generic type parameters](#generic-type-parameters) (use with caution)
+- [Aware of generic type parameters](#generic-type-parameters) (use with
+  caution)
 - Actively maintained
 
 ---
@@ -60,21 +62,23 @@ assert.string(foo);
 
 ## is(value)
 
-Attempts to ascertain the type of the value it receives. Accepts only one argument. 
+Attempts to ascertain the type of the value it receives. Accepts only one
+argument.
 
 ```ts
-is('🦕');
+is("🦕");
 // 'string'
 
 is(new Map());
 // 'Map'
 ```
 
-> **Returns**:  the type of `value`.
+> **Returns**: the type of `value`.
 
 ## `is.{method}`
 
-All the below methods accept a value and returns a boolean for whether the value is of the desired type.
+All the below methods accept a value and returns a boolean for whether the value
+is of the desired type.
 
 ```ts
 is.number(6);
@@ -84,7 +88,7 @@ is.undefined(true);
 // false
 ```
 
----  
+---
 
 ## Primitives
 
@@ -92,7 +96,7 @@ is.undefined(true);
 
 <details><summary><strong>Examples of Primitives</strong></summary>
 
----  
+---
 
 - `'undefined'`
 - `'null'`
@@ -102,69 +106,72 @@ is.undefined(true);
 - `'Function'`
 - `'Object'`
 
-> **Note**: It will throw an error if you try to feed it object-wrapped primitives, as that's a bad practice (e.g. `new String('foo')`)
+> **Note**: It will throw an error if you try to feed it object-wrapped
+> primitives, as that's a bad practice (e.g. `new String('foo')`)
 
 </details>
 
 <details open><summary><strong>API Methods</strong></summary>
 
----  
+---
 
 ### undefined
 
 ```ts
-is.undefined(value)
+is.undefined(value);
 ```
 
 ### null
 
 ```ts
-is.null(value)
+is.null(value);
 ```
 
-> **Note**: TypeScript users must use `.null_()` because of a TypeScript naming limitation.
+> **Note**: TypeScript users must use `.null_()` because of a TypeScript naming
+> limitation.
 
 ### string
 
 ```ts
-is.string(value)
+is.string(value);
 ```
 
 ### number
 
 ```ts
-is.number(value)
+is.number(value);
 ```
 
-> **Note:** `is.number(NaN)` returns `false`. This intentionally deviates from `typeof` behavior to increase user-friendliness of `is` type checks.
+> **Note:** `is.number(NaN)` returns `false`. This intentionally deviates from
+> `typeof` behavior to increase user-friendliness of `is` type checks.
 
 ### boolean
 
 ```ts
-is.boolean(value)
+is.boolean(value);
 ```
 
 ### symbol
 
 ```ts
-is.symbol(value)
+is.symbol(value);
 ```
 
 ### bigint
 
 ```ts
-is.bigint(value)
+is.bigint(value);
 ```
 
 </details>
 
----  
+---
 
-## Builtins 
+## Builtins
 
 <details open><summary><strong>API Methods</strong></summary>
 
----  
+---
 
 ### array
 
@@ -172,7 +179,8 @@ is.bigint(value)
 is.array(value, assertion?)
 ```
 
-> **Returns**:  true if `value` is an array and all of its items match the assertion (if provided).
+> **Returns**: true if `value` is an array and all of its items match the
+> assertion (if provided).
 
 #### Examples
 
@@ -184,94 +192,102 @@ is.array(value, is.number); // Validate `value` is an array and all of its items
 ### function
 
 ```ts
-is.function(value)
+is.function(value);
 ```
 
-> **Note**: TypeScript users must use `.function_()` because of a TypeScript naming limitation.
+> **Note**: TypeScript users must use `.function_()` because of a TypeScript
+> naming limitation.
 
 ### buffer
 
 ```ts
-is.buffer(value)
+is.buffer(value);
 ```
 
 ### blob
 
 ```ts
-is.blob(value)
+is.blob(value);
 ```
 
 ### object
 
 ```ts
-is.object(value)
+is.object(value);
 ```
 
-> **Important**: Keep in mind that [functions are objects too](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions).
+> **Important**: Keep in mind that
+> [functions are objects too](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions).
 
 ### numericString
 
 ```ts
-is.numericString(value)
+is.numericString(value);
 ```
 
-> **Returns**:  `true` for a string that represents a number satisfying `is.number`, for example, `'42'` and `'-8.3'`.
+> **Returns**: `true` for a string that represents a number satisfying
+> `is.number`, for example, `'42'` and `'-8.3'`.
 
-> **Important**: `'NaN'` returns `false`, but `'Infinity'` and `'-Infinity'` return `true`.
+> **Important**: `'NaN'` returns `false`, but `'Infinity'` and `'-Infinity'`
+> return `true`.
 
 ### regExp
 
 ```ts
-is.regExp(value)
+is.regExp(value);
 ```
 
 ### date
 
 ```ts
-is.date(value)
+is.date(value);
 ```
 
 ### error
 
 ```ts
-is.error(value)
+is.error(value);
 ```
 
 ### nativePromise
 
 ```ts
-is.nativePromise(value)
+is.nativePromise(value);
 ```
 
 ### promise
 
 ```ts
-is.promise(value)
+is.promise(value);
 ```
 
-> **Returns**:  `true` for any object with a `.then()` and `.catch()` method. Prefer this one over `.nativePromise()` as you usually want to allow userland promise implementations too.
+> **Returns**: `true` for any object with a `.then()` and `.catch()` method.
+> Prefer this one over `.nativePromise()` as you usually want to allow userland
+> promise implementations too.
 
 ### generator
 
 ```ts
-is.generator(value)
+is.generator(value);
 ```
 
-> **Returns**:  `true` for any object that implements its own `.next()` and `.throw()` methods and has a function definition for `Symbol.iterator`.
+> **Returns**: `true` for any object that implements its own `.next()` and
+> `.throw()` methods and has a function definition for `Symbol.iterator`.
 
 ### generatorFunction
 
 ```ts
-is.generatorFunction(value)
+is.generatorFunction(value);
 ```
 
 ### asyncFunction
 
 ```ts
-is.asyncFunction(value)
+is.asyncFunction(value);
 ```
 
-> **Returns**:  `true` for any `async` function that can be called with the `await` operator.
+> **Returns**: `true` for any `async` function that can be called with the
+> `await` operator.
 
 #### Examples
 
@@ -286,23 +302,23 @@ is.asyncFunction(() => {});
 ### asyncGenerator
 
 ```ts
-is.asyncGenerator(value)
+is.asyncGenerator(value);
 ```
 
 #### Examples
 
 ```ts
 is.asyncGenerator(
-	(async function * () {
-		yield 4;
-	})()
+  (async function* () {
+    yield 4;
+  })(),
 );
 // true
 
 is.asyncGenerator(
-	(function * () {
-		yield 4;
-	})()
+  (function* () {
+    yield 4;
+  })(),
 );
 // false
 ```
@@ -310,19 +326,19 @@ is.asyncGenerator(
 ### asyncGeneratorFunction
 
 ```ts
-is.asyncGeneratorFunction(value)
+is.asyncGeneratorFunction(value);
 ```
 
 #### Examples
 
 ```ts
-is.asyncGeneratorFunction(async function * () {
-	yield 4;
+is.asyncGeneratorFunction(async function* () {
+  yield 4;
 });
 // true
 
-is.asyncGeneratorFunction(function * () {
-	yield 4;
+is.asyncGeneratorFunction(function* () {
+  yield 4;
 });
 // false
 ```
@@ -330,10 +346,10 @@ is.asyncGeneratorFunction(function * () {
 ### boundFunction
 
 ```ts
-is.boundFunction(value)
+is.boundFunction(value);
 ```
 
-> **Returns**:  `true` for any `bound` function.
+> **Returns**: `true` for any `bound` function.
 
 ```ts
 is.boundFunction(() => {});
@@ -349,137 +365,136 @@ is.boundFunction(function () {});
 ### map
 
 ```ts
-is.map(value)
+is.map(value);
 ```
 
 ### set
 
 ```ts
-is.set(value)
+is.set(value);
 ```
 
 ### weakMap
 
 ```ts
-is.weakMap(value)
+is.weakMap(value);
 ```
 
 ### weakSet
 
 ```ts
-is.weakSet(value)
+is.weakSet(value);
 ```
 
 ### weakRef
 
 ```ts
-is.weakRef(value)
+is.weakRef(value);
 ```
 
 </details>
 
----  
+---
 
 ## TypedArrays
 
 <details open><summary><strong>API Methods</strong></summary>
 
----  
+---
 
 ### int8Array
 
 ```ts
-is.int8Array(value)
+is.int8Array(value);
 ```
 
 ### uint8Array
 
 ```ts
-is.uint8Array(value)
+is.uint8Array(value);
 ```
 
 ### uint8ClampedArray
 
 ```ts
-is.uint8ClampedArray(value)
+is.uint8ClampedArray(value);
 ```
 
 ### int16Array
 
 ```ts
-is.int16Array(value)
+is.int16Array(value);
 ```
 
 ### uint16Array
 
 ```ts
-is.uint16Array(value)
+is.uint16Array(value);
 ```
 
 ### int32Array
 
 ```ts
-is.int32Array(value)
+is.int32Array(value);
 ```
 
 ### uint32Array
 
 ```ts
-is.uint32Array(value)
+is.uint32Array(value);
 ```
 
 ### float32Array
 
 ```ts
-is.float32Array(value)
+is.float32Array(value);
 ```
 
 ### float64Array
 
 ```ts
-is.float64Array(value)
+is.float64Array(value);
 ```
 
 ### bigInt64Array
 
 ```ts
-is.bigInt64Array(value)
+is.bigInt64Array(value);
 ```
 
 ### bigUint64Array
 
 ```ts
-is.bigUint64Array(value)
+is.bigUint64Array(value);
 ```
 
 </details>
 
----  
+---
 
 ## Structured Data
 
 <details open><summary><strong>API Methods</strong></summary>
 
----  
+---
 
 ### arrayBuffer
 
 ```ts
-is.arrayBuffer(value)
+is.arrayBuffer(value);
 ```
 
 ### sharedArrayBuffer
 
 ```ts
-is.sharedArrayBuffer(value)
+is.sharedArrayBuffer(value);
 ```
 
 ### dataView
 
 ```ts
-is.dataView(value)
+is.dataView(value);
 ```
-
 
 ### enumCase
 
@@ -487,66 +502,67 @@ is.dataView(value)
 is.enumCase(value, enum)
 ```
 
-> **Note**: **TypeScript-only**. Returns `true` if `value` is a member of `enum`.
+> **Note**: **TypeScript-only**. Returns `true` if `value` is a member of
+> `enum`.
 
 ```ts
 enum Direction {
-	Ascending = 'ascending',
-	Descending = 'descending'
+  Ascending = "ascending",
+  Descending = "descending",
 }
-is.enumCase('ascending', Direction);
+is.enumCase("ascending", Direction);
 // true
-is.enumCase('other', Direction);
+is.enumCase("other", Direction);
 // false
 ```
 
 </details>
 
----  
+---
 
 ## Emptiness
 
 <details open><summary><strong>API Methods</strong></summary>
 
----  
+---
 
 ### emptyString
 
 ```ts
-is.emptyString(value)
+is.emptyString(value);
 ```
 
-
-> **Returns**:  `true` if the value is a `string` and the `.length` is 0.
+> **Returns**: `true` if the value is a `string` and the `.length` is 0.
 
 ### emptyStringOrWhitespace
 
 ```ts
-is.emptyStringOrWhitespace(value)
+is.emptyStringOrWhitespace(value);
 ```
 
-
-> **Returns**:  `true` if `is.emptyString(value)` or if it's a `string` that is all whitespace.
+> **Returns**: `true` if `is.emptyString(value)` or if it's a `string` that is
+> all whitespace.
 
 ### nonEmptyString
 
 ```ts
-is.nonEmptyString(value)
+is.nonEmptyString(value);
 ```
 
-
-> **Returns**:  `true` if the value is a `string` and the `.length` is more than 0.
+> **Returns**: `true` if the value is a `string` and the `.length` is more
+> than 0.
 
 ### nonEmptyStringAndNotWhitespace
 
 ```ts
-is.nonEmptyStringAndNotWhitespace(value)
+is.nonEmptyStringAndNotWhitespace(value);
 ```
 
-> **Returns**:  `true` if the value is a `string` that is not empty and not whitespace.
+> **Returns**: `true` if the value is a `string` that is not empty and not
+> whitespace.
 
 ```ts
-const values = ['property1', '', null, 'property2', '    ', undefined];
+const values = ["property1", "", null, "property2", "    ", undefined];
 values.filter(is.nonEmptyStringAndNotWhitespace);
 // ['property1', 'property2']
 ```
@@ -554,36 +570,39 @@ values.filter(is.nonEmptyStringAndNotWhitespace);
 ### emptyArray
 
 ```ts
-is.emptyArray(value)
+is.emptyArray(value);
 ```
 
-> **Returns**:  `true` if the value is an `Array` and the `.length` is 0.
+> **Returns**: `true` if the value is an `Array` and the `.length` is 0.
 
 ### nonEmptyArray
 
 ```ts
-is.nonEmptyArray(value)
+is.nonEmptyArray(value);
 ```
 
-> **Returns**:  `true` if the value is an `Array` and the `.length` is more than 0.
+> **Returns**: `true` if the value is an `Array` and the `.length` is more
+> than 0.
 
 ### emptyObject
 
 ```ts
-is.emptyObject(value)
+is.emptyObject(value);
 ```
 
-> **Returns**:  `true` if the value is an `Object` and `Object.keys(value).length` is 0.
+> **Returns**: `true` if the value is an `Object` and
+> `Object.keys(value).length` is 0.
 
-> **Note**: `Object.keys` returns only own enumerable properties. Hence something like this can happen:
+> **Note**: `Object.keys` returns only own enumerable properties. Hence
+> something like this can happen:
 
 ```ts
 const object1 = {};
-Object.defineProperty(object1, 'property1', {
-	value: 42,
-	writable: true,
-	enumerable: false,
-	configurable: true
+Object.defineProperty(object1, "property1", {
+  value: 42,
+  writable: true,
+  enumerable: false,
+  configurable: true,
 });
 is.emptyObject(object1);
 // true
@@ -592,57 +611,53 @@ is.emptyObject(object1);
 ### nonEmptyObject
 
 ```ts
-is.nonEmptyObject(value)
+is.nonEmptyObject(value);
 ```
 
-
-> **Returns**:  `true` if the value is an `Object` and `Object.keys(value).length` is more than 0.
+> **Returns**: `true` if the value is an `Object` and
+> `Object.keys(value).length` is more than 0.
 
 ### emptySet
 
 ```ts
-is.emptySet(value)
+is.emptySet(value);
 ```
 
-
-> **Returns**:  `true` if the value is a `Set` and the `.size` is 0.
+> **Returns**: `true` if the value is a `Set` and the `.size` is 0.
 
 ### nonEmptySet
 
 ```ts
-is.nonEmptySet(Value)
+is.nonEmptySet(Value);
 ```
 
-
-> **Returns**:  `true` if the value is a `Set` and the `.size` is more than 0.
+> **Returns**: `true` if the value is a `Set` and the `.size` is more than 0.
 
 ### emptyMap
 
 ```ts
-is.emptyMap(value)
+is.emptyMap(value);
 ```
 
-
-> **Returns**:  `true` if the value is a `Map` and the `.size` is 0.
+> **Returns**: `true` if the value is a `Map` and the `.size` is 0.
 
 ### nonEmptyMap
 
 ```ts
-is.nonEmptyMap(value)
+is.nonEmptyMap(value);
 ```
 
-
-> **Returns**:  `true` if the value is a `Map` and the `.size` is more than 0.
+> **Returns**: `true` if the value is a `Map` and the `.size` is more than 0.
 
 </details>
 
----  
+---
 
 ## Everything Else
 
 <details open><summary><strong>API Methods</strong></summary>
 
----  
+---
 
 ### directInstanceOf
 
@@ -650,8 +665,7 @@ is.nonEmptyMap(value)
 is.directInstanceOf(value, class)
 ```
 
-
-> **Returns**:  `true` if `value` is a direct instance of `class`.
+> **Returns**: `true` if `value` is a direct instance of `class`.
 
 ```ts
 is.directInstanceOf(new Error(), Error);
@@ -664,14 +678,14 @@ is.directInstanceOf(new UnicornError(), Error);
 ### urlInstance
 
 ```ts
-is.urlInstance(value)
+is.urlInstance(value);
 ```
 
-
-> **Returns**:  `true` if `value` is an instance of the [`URL` class](https://mdn.io/URL).
+> **Returns**: `true` if `value` is an instance of the
+> [`URL` class](https://mdn.io/URL).
 
 ```ts
-const url = new URL('https://example.com');
+const url = new URL("https://example.com");
 is.urlInstance(url);
 // true
 ```
@@ -679,15 +693,16 @@ is.urlInstance(url);
 ### urlString
 
 ```ts
-is.urlString(value)
+is.urlString(value);
 ```
 
-> **Returns**:  `true` if `value` is a URL string.
+> **Returns**: `true` if `value` is a URL string.
 
-Note: this only does basic checking using the [`URL` class](https://mdn.io/URL) constructor.
+Note: this only does basic checking using the [`URL` class](https://mdn.io/URL)
+constructor.
 
 ```ts
-const url = 'https://example.com';
+const url = "https://example.com";
 is.urlString(url);
 // true
 is.urlString(new URL(url));
@@ -697,14 +712,13 @@ is.urlString(new URL(url));
 ### truthy
 
 ```ts
-is.truthy(value)
+is.truthy(value);
 ```
 
-
-> **Returns**:  `true` for all values that evaluate to true in a boolean context:
+> **Returns**: `true` for all values that evaluate to true in a boolean context:
 
 ```ts
-is.truthy('🦕');
+is.truthy("🦕");
 // true
 is.truthy(undefined);
 // false
@@ -713,101 +727,102 @@ is.truthy(undefined);
 ### falsy
 
 ```ts
-is.falsy(value)
+is.falsy(value);
 ```
 
-
-> **Returns**:  `true` if `value` is one of: `false`, `0`, `''`, `null`, `undefined`, `NaN`.
+> **Returns**: `true` if `value` is one of: `false`, `0`, `''`, `null`,
+> `undefined`, `NaN`.
 
 ### NaN
 
 ```ts
-is.nan(value)
+is.nan(value);
 ```
 
 ### nullOrUndefined
 
 ```ts
-is.nullOrUndefined(value)
+is.nullOrUndefined(value);
 ```
 
 ### primitive
 
 ```ts
-is.primitive(value)
+is.primitive(value);
 ```
 
-
-JavaScript primitives are as follows: `null`, `undefined`, `string`, `number`, `boolean`, `symbol`.
+JavaScript primitives are as follows: `null`, `undefined`, `string`, `number`,
+`boolean`, `symbol`.
 
 ### integer
 
 ```ts
-is.integer(value)
+is.integer(value);
 ```
-
 
 ### safeInteger
 
 ```ts
-is.safeInteger(value)
+is.safeInteger(value);
 ```
 
-
-> **Returns**:  `true` if `value` is a [safe integer](https://mdn.io/isSafeInteger).
+> **Returns**: `true` if `value` is a
+> [safe integer](https://mdn.io/isSafeInteger).
 
 ### plainObject
 
 ```ts
-is.plainObject(value)
+is.plainObject(value);
 ```
 
-
-An object is plain if it's created by either `{}`, `new Object()`, or `Object.create(null)`.
+An object is plain if it's created by either `{}`, `new Object()`, or
+`Object.create(null)`.
 
 ### iterable
 
 ```ts
-is.iterable(value)
+is.iterable(value);
 ```
 
 ### asyncIterable
 
 ```ts
-is.asyncIterable(value)
+is.asyncIterable(value);
 ```
 
 ### class
 
 ```ts
-is.class(value)
+is.class(value);
 ```
 
-> **Returns**:  `true` for instances created by a class.
+> **Returns**: `true` for instances created by a class.
 
-**Note:** TypeScript users must use `.class_()` because of a TypeScript naming limitation.
+**Note:** TypeScript users must use `.class_()` because of a TypeScript naming
+limitation.
 
 ### typedArray
 
 ```ts
-is.typedArray(value)
+is.typedArray(value);
 ```
 
 ### arrayLike
 
 ```ts
-is.arrayLike(value)
+is.arrayLike(value);
 ```
 
-A `value` is array-like if it is not a function and has a `value.length` that is a safe integer greater than or equal to 0.
+A `value` is array-like if it is not a function and has a `value.length` that is
+a safe integer greater than or equal to 0.
 
 ```ts
 is.arrayLike(document.forms);
 // true
 
 function foo() {
-	is.arrayLike(arguments);
-	// true
+  is.arrayLike(arguments);
+  // true
 }
 foo();
 ```
@@ -815,10 +830,11 @@ foo();
 ### inRange
 
 ```ts
-is.inRange(value, range)
+is.inRange(value, range);
 ```
 
-Check if `value` (number) is in the given `range`. The range is an array of two values, lower bound and upper bound, in no specific order.
+Check if `value` (number) is in the given `range`. The range is an array of two
+values, lower bound and upper bound, in no specific order.
 
 ```ts
 is.inRange(3, [0, 5]);
@@ -829,9 +845,8 @@ is.inRange(0, [-2, 2]);
 ### inRange
 
 ```ts
-is.inRange(value, upperBound)
+is.inRange(value, upperBound);
 ```
-
 
 Check if `value` (number) is in the range of `0` to `upperBound`.
 
@@ -842,37 +857,36 @@ is.inRange(3, 10);
 ### domElement
 
 ```ts
-is.domElement(value)
+is.domElement(value);
 ```
 
-
-> **Returns**:  `true` if `value` is a DOM Element.
+> **Returns**: `true` if `value` is a DOM Element.
 
 ### nodeStream
 
 ```ts
-is.nodeStream(value)
+is.nodeStream(value);
 ```
 
-> **Returns**:  `true` if `value` is a Node.js [stream](https://nodejs.org/api/stream.html).
+> **Returns**: `true` if `value` is a Node.js
+> [stream](https://nodejs.org/api/stream.html).
 
 ```ts
-import fs from 'node:fs';
-is.nodeStream(fs.createReadStream('unicorn.png'));
+import fs from "node:fs";
+is.nodeStream(fs.createReadStream("unicorn.png"));
 // true
 ```
 
 ### observable
 
 ```ts
-is.observable(value)
+is.observable(value);
 ```
 
-
-> **Returns**:  `true` if `value` is an `Observable`.
+> **Returns**: `true` if `value` is an `Observable`.
 
 ```ts
-import {Observable} from 'rxjs';
+import { Observable } from "rxjs";
 is.observable(new Observable());
 // true
 ```
@@ -880,47 +894,44 @@ is.observable(new Observable());
 ### infinite
 
 ```ts
-is.infinite(value)
+is.infinite(value);
 ```
-
 
 Check if `value` is `Infinity` or `-Infinity`.
 
 ### evenInteger
 
 ```ts
-is.evenInteger(value)
+is.evenInteger(value);
 ```
 
-
-> **Returns**:  `true` if `value` is an even integer.
+> **Returns**: `true` if `value` is an even integer.
 
 ### oddInteger
 
 ```ts
-is.oddInteger(value)
+is.oddInteger(value);
 ```
 
-
-> **Returns**:  `true` if `value` is an odd integer.
+> **Returns**: `true` if `value` is an odd integer.
 
 ### propertyKey
 
 ```ts
-is.propertyKey(value)
+is.propertyKey(value);
 ```
 
-
-> **Returns**:  `true` if `value` can be used as an object property key (either `string`, `number`, or `symbol`).
+> **Returns**: `true` if `value` can be used as an object property key (either
+> `string`, `number`, or `symbol`).
 
 ### formData
 
 ```ts
-is.formData(value)
+is.formData(value);
 ```
 
-
-> **Returns**:  `true` if `value` is an instance of the [`FormData` class](https://developer.mozilla.org/en-US/docs/Web/API/FormData).
+> **Returns**: `true` if `value` is an instance of the
+> [`FormData` class](https://developer.mozilla.org/en-US/docs/Web/API/FormData).
 
 ```ts
 const data = new FormData();
@@ -931,10 +942,11 @@ is.formData(data);
 ### urlSearchParams
 
 ```ts
-is.urlSearchParams(value)
+is.urlSearchParams(value);
 ```
 
-> **Returns**:  `true` if `value` is an instance of the [`URLSearchParams` class](https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams).
+> **Returns**: `true` if `value` is an instance of the
+> [`URLSearchParams` class](https://developer.mozilla.org/en-US/docs/Web/API/URLSearchParams).
 
 ```ts
 const searchParams = new URLSearchParams();
@@ -948,170 +960,190 @@ is.urlSearchParams(searchParams);
 is.any(predicate | predicate[], ...values)
 ```
 
-
-Using a single `predicate` argument, returns `true` if **any** of the input `values` returns true in the `predicate`:
+Using a single `predicate` argument, returns `true` if **any** of the input
+`values` returns true in the `predicate`:
 
 ```ts
-is.any(is.string, {}, true, '🦕');
+is.any(is.string, {}, true, "🦕");
 // true
-is.any(is.boolean, 'denosaurs', [], new Map());
+is.any(is.boolean, "denosaurs", [], new Map());
 // false
 ```
 
-Using an array of `predicate[]`, returns `true` if **any** of the input `values` returns true for **any** of the `predicates` provided in an array:
+Using an array of `predicate[]`, returns `true` if **any** of the input `values`
+returns true for **any** of the `predicates` provided in an array:
 
 ```ts
-is.any([is.string, is.number], {}, true, '🦕');
+is.any([is.string, is.number], {}, true, "🦕");
 // true
-is.any([is.boolean, is.number], 'denosaurs', [], new Map());
+is.any([is.boolean, is.number], "denosaurs", [], new Map());
 // false
 ```
 
 ### all
 
 ```ts
-is.all(predicate, ...values)
+is.all(predicate, ...values);
 ```
 
-
-> **Returns**:  `true` if **all** of the input `values` returns true in the `predicate`:
+> **Returns**: `true` if **all** of the input `values` returns true in the
+> `predicate`:
 
 ```ts
 is.all(is.object, {}, new Map(), new Set());
 // true
-is.all(is.string, '🦕', [], 'denosaurs');
+is.all(is.string, "🦕", [], "denosaurs");
 // false
 ```
 
 </details>
 
----  
+---
 
 ## Type Guards
 
-When using `is` together with TypeScript, [type guards](http://www.typescriptlang.org/docs/handbook/advanced-types.html#type-guards-and-differentiating-types) are being used extensively to infer the correct type inside if-else statements.
+When using `is` together with TypeScript,
+[type guards](http://www.typescriptlang.org/docs/handbook/advanced-types.html#type-guards-and-differentiating-types)
+are being used extensively to infer the correct type inside if-else statements.
 
 <details open><summary><strong>Examples</strong></summary>
 
----  
+---
 
 ```ts
 import is from "https://deno.land/x/dis@0.0.0/mod.ts";
 const padLeft = (value: string, padding: string | number) => {
+  if (is.number(padding)) {
+    // `padding` is typed as `number`
+    return Array(padding + 1).join(" ") + value;
+  }
 
-	if (is.number(padding)) {
-		// `padding` is typed as `number`
-		return Array(padding + 1).join(' ') + value;
-	}
+  if (is.string(padding)) {
+    // `padding` is typed as `string`
+    return padding + value;
+  }
 
-	if (is.string(padding)) {
-		// `padding` is typed as `string`
-		return padding + value;
-	}
-
-	throw new TypeError(`Expected 'padding' to be of type 'string' or 'number', got '${is(padding)}'.`);
-}
-padLeft('🦕', 3);
+  throw new TypeError(
+    `Expected 'padding' to be of type 'string' or 'number', got '${
+      is(padding)
+    }'.`,
+  );
+};
+padLeft("🦕", 3);
 // '   🦕'
 
-padLeft('🦕', '🌈');
+padLeft("🦕", "🌈");
 // '🌈🦕'
 ```
 
 </details>
 
----  
+---
 
 ## Type Assertions
 
-The type guards are also available as [type assertions](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#assertion-functions), which throw an error for unexpected types. It is a convenient one-line version of the often repetitive `"if-not-expected-type-throw"` pattern.
+The type guards are also available as
+[type assertions](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#assertion-functions),
+which throw an error for unexpected types. It is a convenient one-line version
+of the often repetitive `"if-not-expected-type-throw"` pattern.
 
 <details open><summary><strong>Examples</strong></summary>
 
----  
+---
 
 ```ts
-import { assert } from "https://deno.land/x/dis@0.0.0/mod.ts";  
+import { assert } from "https://deno.land/x/dis@0.0.0/mod.ts";
 
 const handleMovieRatingApiResponse = (response: unknown) => {
-	assert.plainObject(response);
-	// `response` is now typed as a plain `object` with `unknown` properties.
+  assert.plainObject(response);
+  // `response` is now typed as a plain `object` with `unknown` properties.
 
-	assert.number(response.rating);
-	// `response.rating` is now typed as a `number`.
+  assert.number(response.rating);
+  // `response.rating` is now typed as a `number`.
 
-	assert.string(response.title);
-	// `response.title` is now typed as a `string`.
+  assert.string(response.title);
+  // `response.title` is now typed as a `string`.
 
-	return `${response.title} (${response.rating * 10})`;
+  return `${response.title} (${response.rating * 10})`;
 };
-handleMovieRatingApiResponse({rating: 0.87, title: 'The Matrix'});
+handleMovieRatingApiResponse({ rating: 0.87, title: "The Matrix" });
 // 'The Matrix (8.7)'
 
 // This throws an error.
-handleMovieRatingApiResponse({rating: '🦕'});
+handleMovieRatingApiResponse({ rating: "🦕" });
 ```
 
 </details>
 
----  
+---
 
 ## Generic type parameters
 
 <details open><summary><strong>More Information</strong></summary>
 
----  
+---
 
----  
+---
 
-The type guards and type assertions are aware of [generic type parameters](https://www.typescriptlang.org/docs/handbook/generics.html), such as `Promise<T>` and `Map<Key, Value>`. The default is `unknown` for most cases, since `is` cannot check them at runtime. If the generic type is known at compile-time, either implicitly (inferred) or explicitly (provided), `is` propagates the type so it can be used later.
+The type guards and type assertions are aware of
+[generic type parameters](https://www.typescriptlang.org/docs/handbook/generics.html),
+such as `Promise<T>` and `Map<Key, Value>`. The default is `unknown` for most
+cases, since `is` cannot check them at runtime. If the generic type is known at
+compile-time, either implicitly (inferred) or explicitly (provided), `is`
+propagates the type so it can be used later.
 
-Use generic type parameters with caution. They are only checked by the TypeScript compiler, and not checked by `is` at runtime. This can lead to unexpected behavior, where the generic type is _assumed_ at compile-time, but actually is something completely different at runtime. It is best to use `unknown` (default) and type-check the value of the generic type parameter at runtime with `is` or `assert`.
+Use generic type parameters with caution. They are only checked by the
+TypeScript compiler, and not checked by `is` at runtime. This can lead to
+unexpected behavior, where the generic type is _assumed_ at compile-time, but
+actually is something completely different at runtime. It is best to use
+`unknown` (default) and type-check the value of the generic type parameter at
+runtime with `is` or `assert`.
 
 </details>
 <details open><summary><strong>Examples</strong></summary>
 
----  
+---
 
 ```ts
 import { assert } from "https://deno.land/x/dis@0.0.0/mod.ts";
 async function badNumberAssumption(input: unknown) {
-	// Bad assumption about the generic type parameter fools the compile-time type system.
-	assert.promise<number>(input);
-	// `input` is a `Promise` but only assumed to be `Promise<number>`.
-	const resolved = await input;
-	// `resolved` is typed as `number` but was not actually checked at runtime.
-	// Multiplication will return NaN if the input promise did not actually contain a number.
-	return 2 * resolved;
+  // Bad assumption about the generic type parameter fools the compile-time type system.
+  assert.promise<number>(input);
+  // `input` is a `Promise` but only assumed to be `Promise<number>`.
+  const resolved = await input;
+  // `resolved` is typed as `number` but was not actually checked at runtime.
+  // Multiplication will return NaN if the input promise did not actually contain a number.
+  return 2 * resolved;
 }
 async function goodNumberAssertion(input: unknown) {
-	assert.promise(input);
-	// `input` is typed as `Promise<unknown>`
-	const resolved = await input;
-	// `resolved` is typed as `unknown`
-	assert.number(resolved);
-	// `resolved` is typed as `number`
-	// Uses runtime checks so only numbers will reach the multiplication.
-	return 2 * resolved;
+  assert.promise(input);
+  // `input` is typed as `Promise<unknown>`
+  const resolved = await input;
+  // `resolved` is typed as `unknown`
+  assert.number(resolved);
+  // `resolved` is typed as `number`
+  // Uses runtime checks so only numbers will reach the multiplication.
+  return 2 * resolved;
 }
-badNumberAssumption(Promise.resolve('An unexpected string'));
+badNumberAssumption(Promise.resolve("An unexpected string"));
 // NaN
 // This correctly throws an error because of the unexpected string value.
-goodNumberAssertion(Promise.resolve('An unexpected string'));
+goodNumberAssertion(Promise.resolve("An unexpected string"));
 ```
 
 </details>
 
----  
+---
 
 ## Frequently Asked Questions
 
 <details>
 <summary><strong>Why yet another type checking module?</strong></summary>
 
----  
+---
 
-There are hundreds of type checking modules on npm, unfortunately, I couldn't find any that fit my needs:
+There are hundreds of type checking modules on npm, unfortunately, I couldn't
+find any that fit my needs:
 
 - Includes both type methods and ability to get the type
 - Types of primitives returned as lowercase and object types as camelcase
@@ -1122,17 +1154,24 @@ There are hundreds of type checking modules on npm, unfortunately, I couldn't fi
 
 For the ones I found, pick 3 of these.
 
-The most common mistakes I noticed in these modules was using `instanceof` for type checking, forgetting that functions are objects, and omitting `symbol` as a primitive.
+The most common mistakes I noticed in these modules was using `instanceof` for
+type checking, forgetting that functions are objects, and omitting `symbol` as a
+primitive.
+
 </details>
 
 <details><summary><strong>Why not just use `instanceof` instead of this package?</strong></summary>
 
---- 
+---
 
-`instanceof` does not work correctly for all types and it does not work across [realms](https://stackoverflow.com/a/49832343/64949). Examples of realms are iframes, windows, web workers, and the `vm` module in Node.js.
+`instanceof` does not work correctly for all types and it does not work across
+[realms](https://stackoverflow.com/a/49832343/64949). Examples of realms are
+iframes, windows, web workers, and the `vm` module in Node.js.
 
 </details>
 
 ---
 
-**MIT License**. Originally by [**Sindre Sorhus**](https://github.com/sindresorhus/is). Ported by [**Nicholas Berlette**](https://github.com/nberlette) for Deno.
+**MIT License**. Originally by
+[**Sindre Sorhus**](https://github.com/sindresorhus/is). Ported by
+[**Nicholas Berlette**](https://github.com/nberlette) for Deno.

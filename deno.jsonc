@@ -20,6 +20,12 @@
         ".vscode",
         ".git*",
         ".node/*"
+      ],
+      "include": [
+        "mod.ts",
+        "types.d.ts",
+        "version.ts",
+        "README.md"
       ]
     }
   },
