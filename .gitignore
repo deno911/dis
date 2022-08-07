@@ -1,0 +1,16 @@
+.*.log
+*.log
+.env*
+!.env.example
+!.env.vault
+!.env.defaults
+.*.swp
+*.save
+node_modules
+Thumbs.db
+.DS_Store
+.SpotlightV100
+.hidden
+.private
+*.pem
+node

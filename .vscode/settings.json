@@ -1,0 +1,16 @@
+{
+  "deno.enable": true,
+  "deno.lint": true,
+  "deno.unstable": true,
+  "deno.suggest.autoImports": true,
+  "deno.suggest.paths": false,
+  "deno.suggest.imports.autoDiscover": true,
+  "deno.suggest.imports.hosts": {
+    "https://deno.land": true,
+    "https://x.nest.land": true,
+    "https://crux.land": true,
+    "https://esm.sh": true
+  },
+  "deno.suggest.names": true,
+  "deno.suggest.completeFunctionCalls": true
+}

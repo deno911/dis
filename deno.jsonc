@@ -1,0 +1,44 @@
+{
+  "compilerOptions": {
+    "lib": [
+      "deno.ns",
+      "deno.window",
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "types": [
+      "./types.d.ts"
+    ],
+    "strict": true,
+    "strictNullChecks": true,
+    "keyofStringsOnly": true
+  },
+  "fmt": {
+    "files": {
+      "exclude": [
+        ".vscode",
+        ".git*",
+        ".node/*"
+      ]
+    }
+  },
+  "lint": {
+    "files": {
+      "exclude": [
+        ".vscode",
+        ".git*",
+        ".node"
+      ]
+    },
+    "rules": {
+      "exclude": [
+        "no-explicit-any",
+        "no-bad-types"
+      ]
+    }
+  },
+  "tasks": {
+    "build:docs": "deno doc --json ./mod.ts > docs.json"
+  }
+}
