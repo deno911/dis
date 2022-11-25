@@ -1,0 +1,84 @@
+image: nberlette/gitpod-enhanced
+
+tasks:
+  - name: "Deno"
+    env:
+      DENO_INSTALL: /home/gitpod/.deno
+    before: >-
+      cd "$GITPOD_REPO_ROOT" || exit $?
+      # if deno binary exists in path, ensure that it is not from homebrew
+      which deno 2>/dev/null | grep -q "linuxbrew" && brew uninstall deno &>/dev/null;
+
+      # ensure the deno install dir exists
+      [ ! -d "$DENO_INSTALL" ] && mkdir -p "$DENO_INSTALL" &>/dev/null;
+      if ! echo -n "$PATH" | grep -q "$DENO_INSTALL/bin"; then
+        export PATH="${DENO_INSTALL:+$DENO_INSTALL/bin:}${PATH-}"
+      fi
+
+      if ! which deno &>/dev/null; then
+        echo 'export PATH="'$DENO_INSTALL'/bin:${PATH-}"' >> ~/.bashrc
+        # download and install the latest release from deno.land
+        curl -fsSL https://deno.land/install.sh | sh -
+      fi
+      
+      # try to cache or re-cache our dependency files
+      deno upgrade --unstable 2>/dev/null
+      git ignore deno.lock &>/dev/null
+      for __file in ./deps.* ./import{-,_,}map.json{c,}; do
+        test -f "$__file" \
+          && deno cache --reload "$__file" --lock-write deno.lock &>/dev/null
+      done
+      
+      exit 0
+    command: deno task dev 2>/dev/null || deno task >&2
+
+ports:
+  - name: "Dev (private)"
+    port: 8000-8888
+    visibility: private
+    onOpen: open-preview
+
+github:
+  prebuilds:
+    branches: true
+    pullRequests: true
+    # custom label to add to a PR
+    addLabel: "gitpod-prebuild"
+    # enable prebuilds for pull requests coming from forks
+    pullRequestsFromForks: true
+    # adds a check to prevent merging PR's if the prebuild fails
+    addCheck: "prevent-merge-on-error"
+
+gitConfig:
+  core.autocrlf: "false"
+  core.eol: lf
+  tag.gpgsign: "true"
+  commit.gpgsign: "true"
+  core.hooksPath: ".github/hooks"
+  hooks.silent: "false"
+  hooks.debug: "false"
+  hooks.commit.test: "deno test -A --unstable --no-check 2>&1"
+  hooks.commit.fmt: "deno fmt"
+  hooks.commit.lint: "false"
+
+vscode:
+  extensions:
+    - denoland.vscode-deno
+    - IuryPiva.run-deno-run
+    - umbo.vscode-velociraptor
+    - Thinker.deno-standard-lib-snippets
+    - editorconfig.editorconfig
+    - josee9988.minifyall
+    - quicktype.quicktype
+    - oliversturm.fix-json
+    - salbert.comment-ts
+    - skarab42.ts-to-md
+    - yzhang.markdown-all-in-one
+    - bierner.markdown-preview-github-styles
+    - cschleiden.vscode-github-actions
+    - vsls-contrib.gistfs
+    - mrmlnc.vscode-json5
+    - redhat.vscode-yaml
+    - gitpod.gitpod-desktop
+    - gitpod.gitpod-remote-ssh
+    - sdras.night-owl
