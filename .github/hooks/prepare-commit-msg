@@ -1,0 +1,289 @@
+#!/usr/bin/env bash
+
+function __prepare_commit_msg_hook() {
+
+  # other general configurations
+  declare DEBUG SILENT
+
+  # enable printing of debug information to stdout
+  DEBUG=$(git config --bool-or-int --default ${DEBUG:-false} --get hooks.debug)
+
+  # silent mode will disable any usage info or error messages from printing
+  SILENT=$(git config --bool-or-int --default ${SILENT:-false} --get hooks.silent)
+
+  # options with known integer values
+  declare -i SUBJECT_LENGTH SCOPE_LENGTH TITLE_LENGTH
+
+  # max length of the subject in total. the commit subject is defined as the
+  # top line of the commit message. if autotrim is enabled, this is the length
+  # the subject will be truncated to, and the original will be pushed to the
+  # top of the commit message below it.
+  SUBJECT_LENGTH=$(git config --int --default 52 --get hooks.commit.message.subjectLength)
+
+  # max length for the scope (before title, after revert/skip-ci prefixes)
+  SCOPE_LENGTH=$(git config --int --default 16 --get hooks.commit.message.scopeLength)
+
+  # max length for the title (subject excluding the scope / prefixes)
+  TITLE_LENGTH=$(git config --int --default $((SUBJECT_LENGTH - SCOPE_LENGTH)) --get hooks.commit.message.titleLength)
+
+  # primary hook options
+  declare LABELS KEYWORDS REVERT SKIP_CI AUTOTRIM
+
+  # commit subject labels
+  LABELS=$(git config --default "build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test" --get hooks.commit.message.labels)
+
+  # commit title keywords, e.g. (fixes #123)
+  KEYWORDS=$(git config --default "close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved" --get hooks.commit.message.keywords)
+
+  # optional prefix for revert commits
+  REVERT=$(git config --default "reverts?: " --get hooks.commit.message.revert)
+
+  # optional prefix for [skip-ci] commits (github actions, etc)
+  SKIP_CI=$(git config --default "\\[(skip|no)[- ]ci\\]:? " --get hooks.commit.message.skipCI)
+
+  # automatically trim commit subjects that are too long
+  AUTOTRIM=$(git config --bool --default true --get hooks.commit.message.autotrim)
+
+  # some regexp patterns and partials
+  declare SCOPE SUBJECT REGEXP
+  SCOPE="[^)]{1,${SCOPE_LENGTH}}"
+  SUBJECT="[\\S\\s]{2,${TITLE_LENGTH}}"
+
+  # start with a blank pattern, anchored only at the beginning of the string
+  REGEXP="^"
+
+  # only add the skip-ci section if it is enabled/defined
+  if [ "$SKIP_CI" != "false" ]; then
+    REGEXP="${REGEXP-}(${SKIP_CI-})?"
+  fi
+  # only add the revert section if it is enabled/defined
+  if [ "$REVERT" != "false" ]; then
+    REGEXP="${REGEXP-}(${REVERT-})?"
+  fi
+  # only add the keywords section if it is enabled/defined
+  if [ -n "$KEYWORDS" ]; then
+    SUBJECT="${SUBJECT-}(${KEYWORDS:+"\\((${KEYWORDS}):? [^)]{1,}\\)"})?"
+  fi
+
+  # build our regexp pattern :)
+  REGEXP+="${LABELS:+("${LABELS-}")}${SCOPE:+"(\\(${SCOPE-}\\))"}?!?:? ${SUBJECT:+"(${SUBJECT-})?"}"
+
+  # allow extra text since it will be auto-trimmed
+  if [ -n "$AUTOTRIM" ] && [ "$AUTOTRIM" != "false" ]; then
+    REGEXP+="([\\S\\s]{0,})?"
+  fi
+
+  # should we anchor the pattern to the end as well? probably a good idea..
+  if [ -n "$ANCHOR" ] && [ "$ANCHOR" != "false" ]; then
+    REGEXP+="$"
+  fi
+
+  # ANSI color/style declarations (empty by default)
+  declare BLK="" RED="" GRN="" YLW="" BLU="" PRP="" CYN="" WHT="" BWT=""
+  declare INV="" REV="" FLS="" UDL="" ITA="" DIM="" BLD="" RST=""
+
+  # ANSI color/style definitions (for color-friendly terminals)
+  if [[ "${NO_COLOR:-0}" == "0" ]]; then
+    # text colors
+    # note: terminal color support may vary
+    # black / default color
+    BLK=$(printf '\033[30m')
+    # red (combine with bold for bright red)
+    RED=$(printf '\033[31m')
+    # green (combine with bold for bright green)
+    GRN=$(printf '\033[32m')
+    # yellow (combine with bold for bright yellow)
+    YLW=$(printf '\033[33m')
+    # blue (combine with bold for bright blue)
+    BLU=$(printf '\033[34m')
+    # purple (combine with bold for bright purple)
+    PRP=$(printf '\033[35m')
+    # cyan (combine with bold for bright cyan)
+    CYN=$(printf '\033[36m')
+    # white (combine with bold for bright white)
+    WHT=$(printf '\033[37m')
+    # bright white
+    BWT=$(printf '\033[38m')
+
+    # text styles
+    # note: terminal style support may vary
+
+    # invisible characters
+    INV=$(printf '\033[08m')
+    # reverse colors
+    REV=$(printf '\033[07m')
+    # flashing colors
+    FLS=$(printf '\033[05m')
+    # underline
+    UDL=$(printf '\033[04m')
+    # italics
+    ITA=$(printf '\033[03m')
+    # dimmed colors
+    DIM=$(printf '\033[02m')
+    # bold / bright colors
+    BLD=$(printf '\033[01m')
+    # reset all styles
+    RST=$(printf '\033[00m')
+  fi
+
+  # Print the usage information to stdout, with a list of all config options
+  usage() {
+    cat <<-EOL
+
+			Available ${BLD}${CYN}git config${RST} options:
+
+			${YLW}hooks.commit.message.${BLD}labels${RST}:
+			  ${DIM}·${RST} ${BLD}Type labels allowed to describe commits.${RST}
+			  ${DIM}·${RST} Labels should be separated with a pipe character: ${BLD}|${RST}
+			  ${DIM}·${RST} ${UDL}Default${RST}: ${BLD}"build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test"${RST}
+
+			${YLW}hooks.commit.message.${BLD}keywords${RST}:
+			  ${DIM}·${RST} ${BLD}Keywords allowed to reference Issues/PRs.${RST}
+			  ${DIM}·${RST} Keywords should be separated with a pipe character: ${BLD}|${RST}
+			  ${DIM}·${RST} ${UDL}Default${RST}: ${BLD}"close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved"${RST}
+
+			${YLW}hooks.commit.message.${BLD}revert${RST}:
+			  ${DIM}·${RST} ${BLD}Prefix that indicates a commit to be reverted.${RST}
+			  ${DIM}·${RST} Set this to "false" to disable (and disallow) the revert prefix.
+			  ${DIM}·${RST} Regular Expressions are allowed (but experimental)
+			  ${DIM}·${RST} ${UDL}Default${RST}: ${BLD}"reverts?: "${RST}
+
+			${YLW}hooks.commit.message.${BLD}skipCI${RST}:
+			  ${DIM}·${RST} ${BLD}Prefix that indicates CI/CD should be skipped.${RST}
+			  ${DIM}·${RST} Set this to "false" to disable (and disallow) any skip-CI prefixes.
+			  ${DIM}·${RST} Regular Expressions are allowed (and experimental)
+			  ${DIM}·${RST} ${UDL}Default${RST}: ${BLD}"\[(skip|no)[- ](ci|CI)\]:? "${RST}
+
+			${YLW}hooks.commit.message.${BLD}scopeLength${RST}:
+			  ${DIM}·${RST} ${BLD}Maximum character length of commit scopes.${RST}
+			  ${DIM}·${RST} ${UDL}Default${RST}: ${BLD}16${RST}
+
+			${YLW}hooks.commit.message.${BLD}titleLength${RST}:
+			  ${DIM}·${RST} ${BLD}Maximum character length of commit SUBJECT.${RST}
+			  ${DIM}·${RST} ${UDL}Default${RST}: ${BLD}36${RST}
+
+			${YLW}hooks.commit.message.${BLD}subjectLength${RST}:
+			  ${DIM}·${RST} ${BLD}Maximum ${BLD}${UDL}total${RST}${ITA} length of commit message.${RST}
+			  ${DIM}·${RST} ${UDL}Default${RST}: ${BLD}52${RST}
+
+			${YLW}hooks.commit.message.${BLD}autotrim${RST}:
+			  ${DIM}·${RST} ${BLD}If "true", auto-trims commit messages to the max total length.${RST}
+			  ${DIM}·${RST} ${UDL}Default${RST}: ${BLD}true${RST}
+
+			${YLW}hooks.${BLD}debug${RST}:
+			  ${DIM}·${RST} ${BLD}Show detailed debugging information during hook process.${RST}
+			  ${DIM}·${RST} ${UDL}Default${RST}: ${BLD}false${RST}
+
+			${YLW}hooks.${BLD}silent${RST}:
+			  ${DIM}·${RST} ${BLD}Silence all warnings and verbose output.${RST}
+			  ${DIM}·${RST} ${UDL}Default${RST}: ${BLD}false${RST}
+
+			${DIM}-  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -${RST}
+
+			References for ${BLD}${BLU}Conventional Commits v1.0.0${RST}:
+			  ${DIM}·${RST} ${CYN}${UDL}https://conventionalcommits.org/en/v1.0.0${RST}
+			  ${DIM}·${RST} ${CYN}${UDL}https://commitlint.io${RST}
+
+			Want to print additional debug data?
+			  ${DIM}·${RST} ${DIM}${GRN}\$${RST} export ${BLD}DEBUG${RST}=${BLD}1${RST}
+			  ${DIM}·${RST} ${DIM}${GRN}\$${RST} git config ${BLD}hooks.debug${RST} ${BLD}true${RST}
+
+			Want to silence these messages?
+			  ${DIM}·${RST} ${DIM}${GRN}\$${RST} export ${BLD}SILENT${RST}=${BLD}1${RST}
+			  ${DIM}·${RST} ${DIM}${GRN}\$${RST} git config ${BLD}hooks.silent${RST} ${BLD}true${RST}
+
+		EOL
+  }
+
+  # Print our error message for malformed commit message
+  error() {
+    echo -e "${RED}${BLD} ⚠ ERROR ⚠ ${RST}\\t${RED}Malformed commit message!${RST}"
+  }
+
+  # Prints some debugging information with config settings and regex patterns
+  debug() {
+    cat <<-EOL
+
+			${BLD}${UDL}${CYN}DEBUG INFO${RST}
+
+			  ${DIM}·${RST} ${BLD}${YLW}hooks.commit.message.labels${RST}:
+			  		${LABELS//|/, }
+			  ${DIM}·${RST} ${BLD}${YLW}hooks.commit.message.keywords${RST}:
+			  		${KEYWORDS//|/, }
+			  ${DIM}·${RST} ${BLD}${YLW}hooks.commit.message.revert${RST}:
+			  		${REVERT}
+			  ${DIM}·${RST} ${BLD}${YLW}hooks.commit.message.skipCI${RST}:
+			  		${SKIP_CI}
+			  ${DIM}·${RST} ${BLD}${YLW}hooks.commit.message.scopeLength${RST}:
+			  		${RED}${SCOPE_LENGTH}${RST}
+			  ${DIM}·${RST} ${BLD}${YLW}hooks.commit.message.titleLength${RST}:
+			  		${RED}${TITLE_LENGTH}${RST}
+			  ${DIM}·${RST} ${BLD}${YLW}hooks.commit.message.subjectLength${RST}:
+			  		${RED}${SUBJECT_LENGTH}${RST}
+			  ${DIM}·${RST} ${BLD}${YLW}\$REGEXP${RST}:
+			  		${RED}/${REGEXP}/${RST}
+
+		EOL
+  }
+
+  validate() {
+    # Validate the commit message.
+    local SUBJECT_TEXT MESSAGE_TEXT ADJUSTED_LENGTH TRUNCATED_SUBJECT_TEXT
+    SUBJECT_TEXT="$(head -1 $1)"
+    MESSAGE_TEXT="$(cat $1 | tr $'\r\n' $'\n' | cut -d$'\n' -f2-)"
+    ADJUSTED_LENGTH=$((SUBJECT_LENGTH - 3))
+
+    if [[ $SUBJECT_TEXT =~ ${REGEXP} ]]; then
+      # is auto-trim enabled?
+      if [[ $AUTOTRIM =~ ^(1|true)$ ]]; then
+        # is the commit subject too long?
+        if ((${#SUBJECT_TEXT} > ADJUSTED_LENGTH)); then
+          # trim it down to the maximum length set in config
+          TRUNCATED_SUBJECT_TEXT="${SUBJECT_TEXT:0:$ADJUSTED_LENGTH}"
+          # add the original, untrimmed subject to top of the message
+          # (plus a small note indicating it was truncated)
+          MESSAGE_TEXT="Original subject (full-length):\\n${SUBJECT_TEXT}\\n${MESSAGE_TEXT}"
+          # truncate the subject with an ellipsis
+          SUBJECT_TEXT="${TRUNCATED_SUBJECT_TEXT}..."
+        fi
+      fi
+      # print the (possibly truncated) commit message to file
+      echo "${SUBJECT_TEXT-}" >"$1"
+      # add the remaining commit message if it is not blank
+      ((${#MESSAGE_TEXT} > 0)) && echo "${MESSAGE_TEXT:-}" >>"$1"
+      # if everything looks good, exit successfully
+      return 0
+    else
+      # oh crap, something went wrong
+
+      # print error if we are not in silent mode
+      [[ $SILENT =~ ^(1|true)$ ]] || error
+
+      # print debug info if in debug mode
+      [[ $DEBUG =~ ^(1|true)$ ]] && debug
+      # exit code 1
+      return 1
+    fi
+  }
+
+  # run validation func if args are provided
+  if (($# > 0)); then
+    if [[ $1 =~ ^(-{0,2}(help|info|usage))|-(h|?)$ ]]; then
+      usage
+      [[ $DEBUG =~ ^(1|true)$ ]] && debug
+      return 1
+    else
+      validate "$@"
+      return $?
+    fi
+  fi
+}
+
+# run the hook function and pipe the return status
+__prepare_commit_msg_hook "$@" || exit $?
+
+# cleanup
+unset -f __prepare_commit_msg_hook &>/dev/null
+
+# graceful fallback
+exit 0
