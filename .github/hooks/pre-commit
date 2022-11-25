@@ -2,70 +2,76 @@
 
 function __pre_commit_hook() {
 
+  declare DEBUG SILENT ENABLED
   # print additional debugging information
-  declare -r _DEBUG=$(git config --bool-or-int --default ${DEBUG:-false} --get hooks.debug)
+  DEBUG=$(git config --bool-or-int --default "${DEBUG:-false}" --get hooks.debug)
 
   # silence all warnings / output other than exit codes
-  declare -r _SILENT=$(git config --bool-or-int --default ${SILENT:-false} --get hooks.silent)
+  SILENT=$(git config --bool-or-int --default "${SILENT:-false}" --get hooks.silent)
 
+  ENABLED=$(git config --bool-or-int --default "${ENABLED:-false}" --get hooks.commit.enable)
+
+  declare COMMIT_FORMAT COMMIT_LINT COMMIT_TEST
   # boolean or string value for pre-commit format command
   # false -> disable | true -> deno fmt | string -> custom cmd
-  declare -r _COMMIT_FORMAT=$(git config --bool-or-str --default ${COMMIT_FORMAT:-true} --get hooks.commit.format)
+  COMMIT_FORMAT=$(git config --bool-or-str --default "${COMMIT_FORMAT:-true}" --get hooks.commit.format)
 
   # boolean or string value for pre-commit lint command
   # false -> disable | true -> deno lint | string -> custom cmd
-  declare -r _COMMIT_LINT=$(git config --bool-or-str --default ${COMMIT_LINT:-false} --get hooks.commit.lint)
+  COMMIT_LINT=$(git config --bool-or-str --default "${COMMIT_LINT:-false}" --get hooks.commit.lint)
 
   # boolean or string value for pre-commit test command
   # false -> disable | true -> deno test -A --no-check | string -> custom cmd
-  declare -r _COMMIT_TEST=$(git config --bool-or-str --default ${COMMIT_TEST:-false} --get hooks.commit.test)
+  COMMIT_TEST=$(git config --bool-or-str --default "${COMMIT_TEST:-false}" --get hooks.commit.test)
 
-  declare -r DEFAULT_COMMIT_FORMAT="deno fmt --unstable"
-  declare -r DEFAULT_COMMIT_LINT="deno lint --unstable"
-  declare -r DEFAULT_COMMIT_TEST="deno test --unstable --allow-all --no-check"
+  declare DEFAULT_COMMIT_FORMAT DEFAULT_COMMIT_LINT DEFAULT_COMMIT_TEST
+
+  DEFAULT_COMMIT_FORMAT="deno fmt --unstable"
+  DEFAULT_COMMIT_LINT="deno lint --unstable"
+  DEFAULT_COMMIT_TEST="deno test --unstable --allow-all --no-check"
 
   declare -F usage precommit
 
   # ANSI color/style declarations (empty by default)
-  declare BLK="" RED="" GRN="" YLW="" BLU="" PRP="" CYN="" WHT="" BWT=""
-  declare INV="" REV="" FLS="" UDL="" ITA="" DIM="" BLD="" RST=""
+  declare GRN="" YLW="" CYN="" UDL="" DIM="" BLD="" RST=""
+  # declare BLK="" RED="" BLU="" PRP="" WHT="" BWT="" INV="" REV="" FLS="" ITA="" #disabled
 
   # ANSI color/style definitions (for color-friendly terminals)
   if [[ "${NO_COLOR:-0}" == "0" ]]; then
     # text colors
     # note: terminal color support may vary
-    # black / default color
-    BLK=$(printf '\033[30m')
-    # red (combine with bold for bright red)
-    RED=$(printf '\033[31m')
     # green (combine with bold for bright green)
     GRN=$(printf '\033[32m')
     # yellow (combine with bold for bright yellow)
     YLW=$(printf '\033[33m')
-    # blue (combine with bold for bright blue)
-    BLU=$(printf '\033[34m')
-    # purple (combine with bold for bright purple)
-    PRP=$(printf '\033[35m')
     # cyan (combine with bold for bright cyan)
     CYN=$(printf '\033[36m')
-    # white (combine with bold for bright white)
-    WHT=$(printf '\033[37m')
-    # bright white
-    BWT=$(printf '\033[38m')
+    # # black / default color
+    # BLK=$(printf '\033[30m')
+    # # red (combine with bold for bright red)
+    # RED=$(printf '\033[31m')
+    # # blue (combine with bold for bright blue)
+    # BLU=$(printf '\033[34m')
+    # # purple (combine with bold for bright purple)
+    # PRP=$(printf '\033[35m')
+    # # white (combine with bold for bright white)
+    # WHT=$(printf '\033[37m')
+    # # bright white
+    # BWT=$(printf '\033[38m')
 
     # text styles
     # note: terminal style support may vary
 
-    # invisible characters
-    INV=$(printf '\033[08m')
-    # reverse colors
-    REV=$(printf '\033[07m')
-    # flashing colors
-    FLS=$(printf '\033[05m')
+    # # invisible characters
+    # INV=$(printf '\033[08m')
+    # # reverse colors
+    # REV=$(printf '\033[07m')
+    # # flashing colors
+    # FLS=$(printf '\033[05m')
+    # # italics
+    # ITA=$(printf '\033[03m')
     # underline
     UDL=$(printf '\033[04m')
-    # italics
-    ITA=$(printf '\033[03m')
     # dimmed colors
     DIM=$(printf '\033[02m')
     # bold / bright colors
@@ -119,29 +125,45 @@ function __pre_commit_hook() {
   }
 
   precommit() {
+    if [[ $ENABLED =~ ^(0|false|disable) ]]; then
+      return 0
+    fi
+
     local __fmt __lint __test __noop
 
     __noop() { :; }
 
     # format
-    case "$_COMMIT_FORMAT" in
-    1 | "1" | "true") __fmt="$DEFAULT_COMMIT_FORMAT" ;;
-    0 | "0" | "false" | "") __fmt="$__noop" ;;
-    *) __fmt="$_COMMIT_FORMAT" ;;
+    case "$COMMIT_FORMAT" in
+    "1" | "true")
+      __fmt="$DEFAULT_COMMIT_FORMAT"
+      ;;
+    "0" | "false" | "")
+      __fmt="$__noop"
+      ;;
+    *) __fmt="$COMMIT_FORMAT" ;;
     esac
 
     # lint
-    case "$_COMMIT_LINT" in
-    1 | "1" | "true") __lint="$DEFAULT_COMMIT_LINT" ;;
-    0 | "0" | "false" | "") __lint="$__noop" ;;
-    *) __lint="$_COMMIT_LINT" ;;
+    case "$COMMIT_LINT" in
+    "1" | "true")
+      __lint="$DEFAULT_COMMIT_LINT"
+      ;;
+    "0" | "false" | "")
+      __lint="$__noop"
+      ;;
+    *) __lint="$COMMIT_LINT" ;;
     esac
 
     # test
-    case "$_COMMIT_TEST" in
-    1 | "1" | "true") __test="$DEFAULT_COMMIT_TEST" ;;
-    0 | "0" | "false" | "") __test="$__noop" ;;
-    *) __test="$_COMMIT_TEST" ;;
+    case "$COMMIT_TEST" in
+    "1" | "true")
+      __test="$DEFAULT_COMMIT_TEST"
+      ;;
+    "0" | "false" | "")
+      __test="$__noop"
+      ;;
+    *) __test="$COMMIT_TEST" ;;
     esac
 
     # run fmt
@@ -150,18 +172,19 @@ function __pre_commit_hook() {
     eval "$__lint" || return $?
     # run test
     eval "$__test" || return $?
+
     # still here? commit!
     return 0
   }
 
   if [[ $1 =~ ^(-{0,2}(help|info|usage))|-(h|?)$ ]]; then
     usage
-    [[ $_DEBUG =~ ^(1|true)$ ]] && debug
+    [[ $DEBUG =~ ^(1|true)$ ]] && debug
     return 1
   fi
 
   precommit "$@"
-  [[ $_DEBUG =~ ^(1|true)$ ]] && debug
+  [[ $DEBUG =~ ^(1|true)$ ]] && debug
   return $?
 }
 
