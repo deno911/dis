@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+
+declare -r _COMMIT_FORMAT _COMMIT_LINT _COMMIT_TEST _DEBUG _SILENT
+
+_DEBUG=$(git config --bool-or-int --default ${DEBUG:-false} --get hooks.debug)
+_SILENT=$(git config --bool-or-int --default ${SILENT:-false} --get hooks.silent)
+_COMMIT_FORMAT=$(git config --bool-or-str --default ${COMMIT_FORMAT:-true} --get hooks.commit.format)
+_COMMIT_LINT=$(git config --bool-or-str --default ${COMMIT_LINT:-true} --get hooks.commit.lint)
+_COMMIT_TEST=$(git config --bool-or-str --default ${COMMIT_TEST:-"deno test -A --unstable --no-check"} --get hooks.commit.test)
+
+declare -r DEFAULT_COMMIT_FORMAT DEFAULT_COMMIT_LINT DEFAULT_COMMIT_TEST
+
+DEFAULT_COMMIT_FORMAT="deno fmt --unstable"
+DEFAULT_COMMIT_LINT="deno lint --unstable"
+DEFAULT_COMMIT_TEST="deno test --unstable --allow-all --no-check"
+
+declare -rF usage precommit
+
+
+precommit() {
+  local __fmt __lint __test __noop
+
+  __noop() { :; }
+
+  # format
+  case "$_COMMIT_FORMAT" in
+    (1 | "1" | "true") __fmt="$DEFAULT_COMMIT_FORMAT";;
+    (0 | "0" | "false" | "") __fmt="$__noop";;
+    (*) __fmt="$_COMMIT_FORMAT";;
+  esac
+
+  # lint
+  case "$_COMMIT_LINT" in
+    (1 | "1" | "true") __lint="$DEFAULT_COMMIT_LINT";;
+    (0 | "0" | "false" | "") __lint="$__noop";;
+    (*) __lint="$_COMMIT_LINT";;
+  esac
+
+  # test
+  case "$_COMMIT_TEST" in
+    (1 | "1" | "true") __test="$DEFAULT_COMMIT_TEST";;
+    (0 | "0" | "false" | "") __test="$__noop";;
+    (*) __test="$_COMMIT_TEST";;
+  esac
+
+  # run fmt
+  eval "$__fmt"  || return $?
+  # run lint
+  eval "$__lint" || return $?
+  # run test
+  eval "$__test" || return $?
+  # still here? commit!
+  return 0
+}
+
+declare -rF RED GRN YLW BLU PRP CYN BLD DIM ITA UDL RST
+
+RED() { [ "$NO_COLOR" = "1" ] || printf '\033[31m'; }
+GRN() { [ "$NO_COLOR" = "1" ] || printf '\033[32m'; }
+YLW() { [ "$NO_COLOR" = "1" ] || printf '\033[33m'; }
+BLU() { [ "$NO_COLOR" = "1" ] || printf '\033[34m'; }
+PRP() { [ "$NO_COLOR" = "1" ] || printf '\033[35m'; }
+CYN() { [ "$NO_COLOR" = "1" ] || printf '\033[36m'; }
+BLD() { [ "$NO_COLOR" = "1" ] || printf '\033[01m'; }
+DIM() { [ "$NO_COLOR" = "1" ] || printf '\033[02m'; }
+ITA() { [ "$NO_COLOR" = "1" ] || printf '\033[03m'; }
+UDL() { [ "$NO_COLOR" = "1" ] || printf '\033[04m'; }
+RST() { [ "$NO_COLOR" = "1" ] || printf '\033[00m'; }
+
+usage() {
+  local silent="${_SILENT:-false}"
+  case "$silent" in
+    (0 | "0" | "false" | "")
+    cat <<-EOL
+
+Print debugging info with either of these:
+  $(DIM)\$$(RESET) export $(BOLD)DEBUG$(RESET)=$(BOLD)1$(RESET)
+  $(DIM)\$$(RESET) git config $(BOLD)hooks.debug$(RESET) $(BOLD)true$(RESET)
+
+Silence these messages:
+  $(DIM)\$$(RESET) export $(BOLD)SILENT$(RESET)=$(BOLD)1$(RESET)
+  $(DIM)\$$(RESET) git config $(BOLD)hooks.silent$(RESET) $(BOLD)true$(RESET)
+
+Available options in $(BOLD)$(CYN)git config$(RESET):
+
+  $(YLW)hooks.commit.$(BOLD)format$(RESET):
+    · $(ITAL)Enable/disable code formatting before each commit.$(RESET)
+    · $(DIM)Setting to true is the same as "deno fmt --unstable"$(RESET)
+    · $(DIM)Set to a string to run a custom command, e.g.: "npm run format"$(RESET)
+    · $(UDL)Default$(RESET):$(BOLD) true$(RESET)
+
+  $(YLW)hooks.commit.$(BOLD)lint$(RESET):
+    · $(ITAL)Enable/disable linting before each commit.$(RESET)
+    · $(DIM)Setting to true is the same as "deno lint --unstable"$(RESET)
+    · $(DIM)Set to a string to run a custom command, e.g.: "eslint ."$(RESET)
+    · $(UDL)Default$(RESET):$(BOLD) true$(RESET)
+
+  $(YLW)hooks.commit.$(BOLD)test$(RESET):
+    · $(ITAL)Enable/disable unit testing before each commit.$(RESET)
+    · $(DIM)Setting to true is the same as "deno test -A --no-check --unstable"$(RESET)
+    · $(DIM)Set to a string to run a custom command, e.g.: "npm run test"$(RESET)
+    · $(UDL)Default$(RESET):$(BOLD) true$(RESET)
+
+  $(YLW)hooks.$(BOLD)debug$(RESET):
+    · $(ITAL)Show detailed debugging information during hook process.$(RESET)
+    · $(UDL)Default$(RESET):$(BOLD) false$(RESET)
+
+  $(YLW)hooks.$(BOLD)silent$(RESET):
+    · $(ITAL)Silence all warnings and verbose output.$(RESET)
+    · $(UDL)Default$(RESET):$(BOLD) false$(RESET)
+
+EOL
+    ;;
+  esac
+}
+
+# run hook if arguments are present
+if (($# > 0)); then
+  precommit "$@"
+  code=$?
+# otherwise show usage
+else
+  usage
+  code=1
+fi
+
+unset RED GRN YLW BLU PRP CYN BLD DIM ITA UDL RST usage precommit
+unset DEFAULT_COMMIT_FORMAT DEFAULT_COMMIT_LINT DEFAULT_COMMIT_TEST
+unset _COMMIT_FORMAT _COMMIT_LINT _COMMIT_TEST _DEBUG _SILENT
+
+exit ${code:-0}
