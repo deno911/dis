@@ -14,3 +14,5 @@ Thumbs.db
 .private
 *.pem
 node
+deno.lock
+_mod.ts
