@@ -4,47 +4,27 @@
       "deno.ns",
       "deno.window",
       "dom",
-      "dom.iterable",
-      "esnext"
+      "dom.iterable"
     ],
     "types": [
       "./types.d.ts"
-    ],
-    "strict": true,
-    "strictNullChecks": true,
-    "keyofStringsOnly": true
+    ]
   },
   "fmt": {
     "files": {
       "exclude": [
-        ".vscode",
-        ".git*",
-        ".node/*"
-      ],
-      "include": [
-        "mod.ts",
-        "types.d.ts",
-        "version.ts",
-        "README.md"
+        ".vscode"
       ]
     }
   },
   "lint": {
-    "files": {
-      "exclude": [
-        ".vscode",
-        ".git*",
-        ".node"
-      ]
-    },
     "rules": {
       "exclude": [
         "no-explicit-any",
-        "no-bad-types"
+        "no-bad-types",
+        "no-namespace",
+        "ban-types"
       ]
     }
-  },
-  "tasks": {
-    "build:docs": "deno doc --json ./mod.ts > docs.json"
   }
 }

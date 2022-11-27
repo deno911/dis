@@ -2,14 +2,19 @@
   "deno.enable": true,
   "deno.lint": true,
   "deno.unstable": true,
+  "deno.testing.enable": true,
+  "deno.testing.args": [
+    "--allow-all",
+    "--no-check",
+    "--unstable"
+  ],
+  "deno.codeLens.test": true,
   "deno.suggest.autoImports": true,
-  "deno.suggest.paths": false,
+  "deno.suggest.paths": true,
   "deno.suggest.imports.autoDiscover": true,
   "deno.suggest.imports.hosts": {
     "https://deno.land": true,
-    "https://x.nest.land": true,
-    "https://crux.land": true,
-    "https://esm.sh": true
+    "https://x.nest.land": true
   },
   "deno.suggest.names": true,
   "deno.suggest.completeFunctionCalls": true
