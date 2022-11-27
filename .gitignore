@@ -15,3 +15,4 @@ Thumbs.db
 *.pem
 node
 deno.lock
+_mod.ts
