@@ -1,7 +1,7 @@
 import { $, ansi } from "./deps.ts";
 
 /** `VERSION` managed by https://deno.land/x/publish */
-export const VERSION = "0.0.1";
+export const VERSION = "0.2.0";
 export const MODULE = "dis";
 
 /** `prepublish` will be invoked before publish */
