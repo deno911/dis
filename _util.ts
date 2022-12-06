@@ -8,6 +8,7 @@ import type {
   ArrayMethod,
   ObjectTypeName,
   Predicate,
+  Primitive,
   PrimitiveTypeName,
   TypedArrayTypeName,
   TypeName,
