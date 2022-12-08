@@ -5,6 +5,7 @@ import type {
   Class,
   DataDescriptor,
   Falsy,
+  Flatten,
   GetTypeName,
   MapIterator,
   Module,

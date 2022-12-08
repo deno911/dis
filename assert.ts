@@ -6,6 +6,7 @@ import type {
   MapIterator,
   Module,
   ObservableLike,
+  PartialByKeys,
   Predicate,
   Primitive,
   SetIterator,
