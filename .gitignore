@@ -16,3 +16,4 @@ Thumbs.db
 node
 deno.lock
 _mod.ts
+_descriptors.json
