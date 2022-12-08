@@ -10,6 +10,9 @@ import {
 
 export { Buffer, DenoBuffer, NodeBuffer };
 
+export * from "./_util/types.d.ts";
+export * from "./_util/typenames.ts";
+
 export declare namespace NodeJS {
   export type Buffer = NodeBuffer;
   export type Stream = NodeStream;
@@ -40,186 +43,16 @@ export declare namespace NodeJS {
 
 declare global {
   interface SymbolConstructor {
-    readonly observable: symbol;
+    /**
+     * A method that describes the object as `Observable` and returns an object
+     * with a `subscribe` method. That method accepts an `observer` for its
+     * single argument, which in turn accepts a arbitrary `value` argument. The
+     * subscribe method may return an `unsubscribe` method to run as a cleanup
+     * or teardown routine when the observable is disposed.
+     *
+     * @see https://github.com/tc39/proposal-observable for more details.
+     * @see {@linkcode ObservableLike} for the interface this matches.
+     */
+    readonly observable: unique symbol;
   }
 }
-
-/**
- * Matches a value that is like an Observable.
- * @see https://github.com/tc39/proposal-observable
- */
-export interface ObservableLike {
-  subscribe(observer: (value: unknown) => void): void;
-  [Symbol.observable](): ObservableLike;
-}
-
-export type Falsy = false | 0 | 0n | "" | null | undefined;
-
-export interface WeakRef<T extends object> {
-  readonly [Symbol.toStringTag]: "WeakRef";
-  deref(): T | undefined;
-}
-
-/**
- * Matches any primitive value.
- * @see https://mdn.io/Primitive
- */
-export type Primitive =
-  | null
-  | undefined
-  | string
-  | number
-  | boolean
-  | symbol
-  | bigint;
-
-export type Predicate = (value: unknown) => boolean;
-
-export type ArrayMethod = (
-  fn: (value: unknown, index: number, array: unknown[]) => boolean,
-  thisArg?: unknown,
-) => boolean;
-
-/**
- * Matches a `class` constructor.
- * @see https://mdn.io/Classes.
- */
-export interface Constructor<Proto = unknown, Args extends any[] = any[]> {
-  new (...args: Args): Proto;
-}
-
-export interface Class<
-  Proto = unknown,
-  Args extends any[] = any[],
-> extends Constructor<Proto, Args> {
-  readonly prototype: Proto;
-}
-
-export type AccessorDescriptor<T = any> = Omit<
-  TypedPropertyDescriptor<T>,
-  "value" | "writable"
->;
-
-export type DataDescriptor<T = any> = Pick<
-  TypedPropertyDescriptor<T>,
-  "configurable" | "enumerable" | "writable" | "value"
->;
-
-export type MapIterator = ReturnType<typeof Map.prototype.entries>;
-
-export type SetIterator = ReturnType<typeof Set.prototype.entries>;
-
-export interface Module {
-  [property: string]: unknown;
-}
-
-/**
- * Matches any [typed array](https://mdn.io/TypedArray).
- * @see https://mdn.io/TypedArray
- */
-export type TypedArray =
-  | Int8Array
-  | Uint8Array
-  | Uint8ClampedArray
-  | Int16Array
-  | Uint16Array
-  | Int32Array
-  | Uint32Array
-  | Float32Array
-  | Float64Array
-  | BigInt64Array
-  | BigUint64Array;
-
-/**
- * TypedArrays
- */
-export const typedArrayTypeNames = [
-  "Int8Array",
-  "Uint8Array",
-  "Uint8ClampedArray",
-  "Int16Array",
-  "Uint16Array",
-  "Int32Array",
-  "Uint32Array",
-  "Float32Array",
-  "Float64Array",
-  "BigInt64Array",
-  "BigUint64Array",
-] as const;
-
-export type typedArrayTypeNames = typeof typedArrayTypeNames;
-export type TypedArrayTypeName = typedArrayTypeNames[number];
-
-export const objectTypeNames = [
-  "Function",
-  "Generator",
-  "GeneratorFunction",
-  "AsyncFunction",
-  "AsyncGenerator",
-  "AsyncGeneratorFunction",
-  "Observable",
-  "Array",
-  "Buffer",
-  "Blob",
-  "Object",
-  "RegExp",
-  "Date",
-  "Error",
-  "Iterable",
-  "Iterator",
-  "IterableIterator",
-  "AsyncIterable",
-  "AsyncIterator",
-  "AsyncIterableIterator",
-  "Map Iterator",
-  "Set Iterator",
-  "Map",
-  "Set",
-  "WeakMap",
-  "WeakSet",
-  "WeakRef",
-  "ArrayBuffer",
-  "SharedArrayBuffer",
-  "DataView",
-  "Module",
-  "Promise",
-  "FormData",
-  "Headers",
-  "Request",
-  "Response",
-  "ReadableStream",
-  "WritableStream",
-  "TransformStream",
-  "Reader",
-  "Writer",
-  "FileInfo",
-  "Proxy",
-  "URLSearchParams",
-  "URLPattern",
-  "URL",
-  "HTMLElement",
-  "SVGElement",
-  "NaN",
-  ...typedArrayTypeNames,
-] as const;
-
-export type objectTypeNames = typeof objectTypeNames;
-export type ObjectTypeName = objectTypeNames[number];
-
-/**
- * Primitives
- */
-export const primitiveTypeNames = [
-  "null",
-  "undefined",
-  "string",
-  "number",
-  "bigint",
-  "boolean",
-  "symbol",
-  "object",
-  "function",
-] as const;
-export type primitiveTypeNames = typeof primitiveTypeNames;
-export type PrimitiveTypeName = primitiveTypeNames[number];
-export type TypeName = ObjectTypeName | PrimitiveTypeName;
