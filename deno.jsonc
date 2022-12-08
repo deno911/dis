@@ -7,8 +7,7 @@
       "dom.iterable"
     ],
     "types": [
-      "./types.ts",
-      "./mod.d.ts"
+      "./types.ts"
     ]
   },
   "fmt": {
