@@ -29,6 +29,17 @@ export const predicateOnArray = (
   return method.call(values, predicate);
 };
 
+export const isAbsoluteMod2 =
+  (remainder: number) => (value: number): value is number =>
+    Number.isInteger(value) && Math.abs(value % 2) === remainder;
+/**
+ * Check if a value is of the valid length for its given type.
+ * @param value
+ * @returns `boolean`
+ */
+export const isValidLength = (value: unknown): value is number =>
+  Number.isSafeInteger(value) && +(value as number) >= 0;
+
 export function isTypedArrayName(name: unknown): name is TypedArrayTypeName {
   return typedArrayTypeNames.includes(name as TypedArrayTypeName);
 }

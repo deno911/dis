@@ -6,6 +6,7 @@ import type {
   Class,
   DataDescriptor,
   Infinity,
+  LastOf,
   MapIterator,
   Module,
   NegativeInfinity,

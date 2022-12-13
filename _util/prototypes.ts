@@ -1,5 +1,6 @@
 import { mapEntries } from "../deps.ts";
-import { isDeprecated } from "./deprecated.decorator.ts";
+import { isDeprecated } from "./decorators/deprecated.decorator.ts";
+import type { Class } from "./types.d.ts";
 
 /**
  * Walk up the prototype chain and find the property descriptor for the
@@ -66,7 +67,7 @@ export function formatPropertyDescriptors(
           ...descriptor,
           configurable: !sealed,
           enumerable: !hideDeprecated,
-          writable: (descriptor.get ? undefined : !sealed),
+          ...(descriptor.value ? { writable: !sealed } : {}),
         }];
       }
 
@@ -74,7 +75,7 @@ export function formatPropertyDescriptors(
         ...descriptor,
         configurable: !sealed,
         enumerable: true,
-        writable: (descriptor.get ? undefined : !sealed),
+        ...(descriptor.value ? { writable: !sealed } : {}),
       }];
     },
   );
@@ -82,40 +83,41 @@ export function formatPropertyDescriptors(
   Object.defineProperties(target, descriptors);
 }
 
-export interface Flags extends Record<PropertyKey, unknown> {
+export interface Flags extends Record<string | symbol, unknown> {
   object?: any;
   negate?: boolean;
   message?: string;
+  // custom
+  [key: string | symbol]: unknown;
 }
 
-export const kFlags = Symbol.for("is:flags");
-export const kObject = Symbol.for("is:object");
-export const kMethods = Symbol.for("is:methods");
+export const kFlags = Symbol("is:flags");
+export const kObject = Symbol("is:object");
+export const kMethods = Symbol("is:methods");
 
-export type FlaggedObject<T extends object = Function> = Flatten<
-  & {
-    [kFlags]: Flags | undefined;
-    _obj?: unknown;
-  }
-  & { [x: PropertyKey]: unknown | undefined }
-  & T
->;
+export type Flagged<T extends {} = object> = {
+  [kFlags]?: Flags | undefined;
+} & T;
 
-export function flag<T extends FlaggedObject>(
-  obj: T,
-  key: PropertyKey,
-  value?: unknown,
-) {
-  const flags = obj[kFlags] || (obj[kFlags] = Object.create(null));
-  if (arguments.length === 3) {
-    flags[key] = value;
+export function flag<V = unknown, T extends {} = object>(
+  obj: Flagged<T>,
+  key: keyof Flags,
+  value?: V,
+): V | void {
+  const flags: Flags = obj[kFlags] || (obj[kFlags] = Object.create(null));
+  if (value) {
+    flags[key] = value as V;
   } else {
-    return flags[key];
+    return flags[key] as V;
   }
 }
 
-export function getActual<T extends FlaggedObject>(obj: T, ...args: any[]) {
-  return args.length > 4 ? args[4] : obj._obj;
+export function getActual<T extends Flagged>(obj: T, ...args: any[]) {
+  return args.length > 4
+    ? args[4]
+    : (Reflect.has(obj, kObject))
+    ? Reflect.get(obj, kObject, obj)
+    : undefined;
 }
 
 const config = {
@@ -126,18 +128,20 @@ const config = {
   proxyExcludedKeys: ["then", "catch", "inspect", "toJSON"],
 };
 
-function inspect<T extends FlaggedObject>(obj: T) {
+function inspect<T extends {}>(obj: Flagged<T>) {
   const str = Deno.inspect(obj);
   const type2 = Object.prototype.toString.call(obj);
 
   if (config.truncateThreshold && str.length >= config.truncateThreshold) {
-    if (type2 === "[object Function]") {
+    if (typeof obj === "function" || obj instanceof Function) {
       return !obj.name || obj.name === ""
         ? "[Function]"
         : `[Function: ${obj.name}]`;
-    } else if (type2 === "[object Array]") {
+    } else if (Array.isArray(obj)) {
       return `[ Array(${obj.length}) ]`;
-    } else if (type2 === "[object Object]") {
+    } else if (
+      typeof obj === "object" && obj !== null && type2 === "[object Object]"
+    ) {
       const keys = Object.keys(obj);
       const kstr = keys.length > 2
         ? keys.splice(0, 2).join(", ") + ", ..."
@@ -151,29 +155,31 @@ function inspect<T extends FlaggedObject>(obj: T) {
   }
 }
 
-export function getMessage<T extends FlaggedObject>(obj: T, ...args: any[]) {
-  const negate = flag(obj, "negate"),
-    val = flag(obj, "object"),
-    expected = args[3],
-    actual = getActual(obj, args);
-  let msg = negate ? args[2] : args[1];
+export function getMessage<T extends {}>(
+  obj: Flagged<T>,
+  message: string | (() => string),
+  negatedMessage: string | (() => string),
+  expected: any,
+): string;
+
+export function getMessage(...args: any[]) {
+  const [obj, ...rest] = args;
+  let [msg, negatedMsg, expected = true] = rest;
+
+  const negated = flag(obj, "negate");
+  const valueOf = flag(obj, "object") as any;
   const flagMsg = flag(obj, "message");
 
-  if (typeof msg === "function") {
-    msg = msg();
-  }
-  msg = msg || "";
-  msg = msg.replace(
-    /#\{(this|obj(ect)?|target|parent|val(ue)?)\}/ig,
-    function () {
-      return inspect(val);
-    },
-  ).replace(/#\{(act(ual)?|received|input)\}/ig, function () {
-    return inspect(actual);
-  }).replace(/#\{(exp|(expect|allow|accept)(ed)?)\}/ig, function () {
-    return inspect(expected);
-  });
-  return flagMsg ? flagMsg + ": " + msg : msg;
+  const actual = getActual(obj, rest);
+
+  const message =
+    ((msg = negated ? negatedMsg : msg),
+      String((typeof msg === "function" ? msg() : msg) || ""))
+      .replace(/[#\$]?\{(this|obj(ect)?|target|val(ue)?)\}/ig, inspect(valueOf))
+      .replace(/[#\$]?\{(act(ual)?|received|input)\}/ig, inspect(actual))
+      .replace(/[#\$]?\{(exp(ect)?|allow|accept)(ed)?\}/ig, inspect(expected));
+
+  return [flagMsg, message].filter(Boolean).join(": ");
 }
 
 function isProxyEnabled() {
@@ -182,14 +188,14 @@ function isProxyEnabled() {
 
 const builtins = [kFlags, kMethods, kObject, "assert"];
 
-export function proxify<T extends FlaggedObject>(
+export function proxify<T extends Flagged>(
   obj: T,
   nonChainableMethodName?: string,
 ) {
   if (!isProxyEnabled()) return obj;
 
   return new Proxy(obj, {
-    get: function proxyGetter(target, property) {
+    get: function $getter(target, property) {
       if (
         typeof property === "string" &&
         config.proxyExcludedKeys.indexOf(property) === -1 &&
@@ -203,8 +209,8 @@ export function proxify<T extends FlaggedObject>(
         let suggestion = null;
         let suggestionDistance = 4;
 
-        Reflect.ownKeys(target).forEach(function (prop) {
-          if (!Reflect.has(target, prop)) {
+        Reflect.ownKeys(target).forEach((prop) => {
+          if (typeof prop === "string" && !Reflect.has(target, prop)) {
             const dist = stringDistanceCapped(
               String(property),
               String(prop),
@@ -223,14 +229,14 @@ export function proxify<T extends FlaggedObject>(
         );
       }
       if (!flag(target, "lockSsfi") && builtins.indexOf(property) === -1) {
-        flag(target, "ssfi", proxyGetter);
+        flag(target, "ssfi", $getter);
       }
       return Reflect.get(target, property);
     },
   });
 }
 
-export function stringDistanceCapped(
+function stringDistanceCapped(
   strA: string,
   strB: string,
   cap: number,
@@ -266,6 +272,27 @@ export function stringDistanceCapped(
   }
 
   return memo[strA.length][strB.length];
+}
+
+/** Attempt to rename a function by changing the object's `name` property. */
+export function renameFunction(fn: Function, value: string | symbol) {
+  if (typeof value === "symbol" && value.description) {
+    value = value.description;
+  }
+  if (typeof value === "string") {
+    if (typeof fn === "function") {
+      const desc = getPropertyDescriptor(fn, "name") ?? {
+        configurable: true,
+        writable: false,
+        enumerable: false,
+      };
+      // remove the old name descriptor
+      Reflect.deleteProperty(fn, "name");
+      // define the new name descriptor
+      Reflect.defineProperty(fn, "name", { ...desc, value });
+    }
+  }
+  return fn;
 }
 
 // export function isDeprecated(

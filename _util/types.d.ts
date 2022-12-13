@@ -512,26 +512,6 @@ export type Record<K extends PropertyKey = string, T = unknown> = {
   [P in K]: T;
 };
 
-/**
- * Exclude from T those types that are assignable to U
- */
-export type Exclude<T, U> = T extends U ? never : T;
-
-/**
- * Extract from T those types that are assignable to U
- */
-export type Extract<T, U> = T extends U ? T : never;
-
-/**
- * Construct a type with the properties of T except for those in type K.
- */
-export type Omit<T, K extends keyof any> = Pick<T, Exclude<keyof T, K>>;
-
-/**
- * Exclude null and undefined from T
- */
-export type NonNullable<T> = T & {};
-
 export type Awaitable<T> = T | Promise<T>;
 
 export type Arrayable<T> = T | T[];
@@ -564,6 +544,84 @@ export type RequiredByKeys<T, K extends keyof T = keyof T, Deep = false> =
   Flatten<
     Require<Pick<T, Extract<keyof T, K>>, Deep> & Omit<T, K>
   >;
+
+export type Conditional<Base, Condition> = NonNullable<
+  { [K in keyof Base]: Base[K] extends Condition ? Base[K] : never }
+>;
+
+export type ConditionalKeys<Base, Condition> = NonNullable<
+  { [K in keyof Base]: Base[K] extends Condition ? K : never }[keyof Base]
+>;
+
+export type ConditionalExcept<Base, Condition> = Except<
+  Base,
+  ConditionalKeys<Base, Condition>
+>;
+
+export type Filter<Key, Exclusions> = Utils.Equal<Key, Exclusions> extends true
+  ? never
+  : (Key extends Exclusions ? never : Key);
+
+export type Except<TObject, Keys extends keyof TObject> = {
+  [Key in keyof TObject as Filter<Key, Keys>]: TObject[Key];
+};
+
+export namespace Utils {
+  export type Id<U> = U extends Record<PropertyKey, unknown>
+    ? { [K in keyof U]: Id<U[K]> }
+    : U;
+
+  export type IsBothExtends<BaseType, FirstType, SecondType> = FirstType extends
+    BaseType ? SecondType extends BaseType ? true
+    : false
+    : false;
+
+  /** @see https://github.com/type-challenges/type-challenges */
+  export type Expect<T extends true> = T;
+  export type ExpectTrue<T extends true> = T;
+  export type ExpectFalse<T extends false> = T;
+  export type IsTrue<T> = T extends true ? T : false;
+  export type IsFalse<T> = T extends false ? true : false;
+  export type Equal<X, Y> = (<T>() => T extends X ? 1 : 2) extends
+    (<T>() => T extends Y ? 1 : 2) ? true
+    : false;
+  export type NotEqual<X, Y> = true extends Equal<X, Y> ? false : true;
+  export type Alike<X, Y> = Equal<Id<X>, Id<Y>>;
+  export type ExpectExtends<Actual, Expected> = Expected extends Actual ? true
+    : false;
+
+  export type ExpectArguments<
+    Func extends (...args: unknown[]) => any,
+    Args extends any[],
+  > = Args extends Parameters<Func> ? true : false;
+
+  /**
+   * @see https://stackoverflow.com/questions/49927523/disallow-call-with-any/49928360#49928360
+   */
+  export type IsAny<T, Yes = true, No = false> = 0 extends (1 & T) ? Yes : No;
+
+  export type NotAny<T, Yes = true, No = false> = true extends IsAny<T> ? No
+    : Yes;
+
+  export type Debug<T> = { [K in keyof T]: T[K] };
+
+  export type OneOf<T, V> = T extends void ? V
+    : [T] extends [unknown] ? V
+    : [T] extends [never] ? V
+    : T & {};
+
+  export type MergeExclusive<L, R> = Id<
+    (
+      L extends void ? R
+        : R extends void ? L
+        : Omit<L, keyof R> & R
+    )
+  >;
+
+  export type MergeRecursive<L, R> = L extends void ? Id<R>
+    : R extends void ? Id<L>
+    : Id<L & R>;
+}
 
 // from lib.es5.d.ts
 
