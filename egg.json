@@ -2,12 +2,12 @@
   "$schema": "https://x.nest.land/eggs@0.3.10/src/schema.json",
   "name": "dis",
   "entry": "./mod.ts",
-  "description": "Typechecking with ease. An extended, hard fork of @sindresorhus/is, for Deno 🦕",
+  "description": "Extensive collection of Typeguards and Assertions 🦕",
   "homepage": "https://github.com/deno911/dis",
-  "version": "0.2.0",
-  "releaseType": "minor",
-  "unstable": false,
-  "unlisted": false,
+  "version": "0.3.0-rc.2",
+  "releaseType": false,
+  "unstable": true,
+  "unlisted": true,
   "files": [
     "./is.ts",
     "./assert.ts",
@@ -17,6 +17,7 @@
     "./deps.ts",
     "./deno.jsonc",
     "./_util.ts",
+    "./_util/*",
     "./LICENSE",
     "./README.md"
   ],
@@ -31,5 +32,6 @@
   "checkTests": false,
   "checkInstallation": false,
   "check": true,
-  "checkAll": true
+  "checkAll": true,
+  "repository": "https://github.com/deno911/dis"
 }

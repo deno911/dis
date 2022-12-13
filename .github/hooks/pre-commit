@@ -168,23 +168,29 @@ function __pre_commit_hook() {
 
     # run fmt
     eval "$__fmt" || return $?
+
     # run lint
     eval "$__lint" || return $?
-    # run test
-    eval "$__test" || return $?
 
+    # run test
+    local tests=$(eval "$__test" 2>&1)
+
+    if [[ $tests =~ ^.*("No test modules"|"no test specified").*$ ]]; then
+      : # noop
+    else
+      echo "$tests"
+      return $?
+    fi
     # still here? commit!
     return 0
   }
 
   if [[ $1 =~ ^(-{0,2}(help|info|usage))|-(h|?)$ ]]; then
     usage
-    [[ $DEBUG =~ ^(1|true)$ ]] && debug
     return 1
   fi
 
   precommit "$@"
-  [[ $DEBUG =~ ^(1|true)$ ]] && debug
   return $?
 }
 

@@ -15,6 +15,9 @@
       "exclude": [
         ".vscode"
       ]
+    },
+    "options": {
+      "proseWrap": "preserve"
     }
   },
   "lint": {
