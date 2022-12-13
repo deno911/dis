@@ -1,15 +1,15 @@
 import "https://deno.land/x/reflection@0.0.2/mod.ts";
 
-import { ansi } from "./ansi.ts";
-
-export const MetadataKeyDeprecated = "metadata:deprecated";
+import { ansi } from "../ansi.ts";
+import type { Flatten } from "../types.d.ts";
+import { DeprecatedSymbol, MetadataKey } from "../constants.ts";
 
 export interface DeprecateOptions {
   hide?: boolean;
   seal?: boolean;
-  since?: string | number;
-  until?: string | number;
-  substitute?: string;
+  since?: string | number | Date;
+  until?: string | number | Date;
+  substitute?: string | symbol | object;
   message?: false | string | DeprecationMessageFn;
   url?: string | URL;
 }
@@ -17,17 +17,17 @@ export interface DeprecateOptions {
 export interface DeprecateInit extends Record<string, unknown> {
   options?: DeprecateOptions;
   parent?: string | object;
-  property: string;
+  property: string | symbol;
 }
 
-export type DeprecationMessageFn = (
-  ctx: Flatten<
-    Omit<DeprecateInit, "options"> & {
-      options?: Omit<DeprecateOptions, "message">;
-    },
+// deno-fmt-ignore
+export interface DeprecationMessageFn {
+  (ctx: Flatten<
+    & { options?: Omit<DeprecateOptions, "message"> } 
+    & Omit<DeprecateInit, "options">, 
     true
-  >,
-) => unknown | string;
+  >): unknown | string;
+}
 
 export const defaultDeprecateInit = {
   options: {
@@ -65,7 +65,7 @@ export const defaultDeprecateInit = {
  */
 export function deprecationWarning(
   parent: string | object,
-  property: string,
+  property: string | symbol,
   options: DeprecateOptions = { ...defaultDeprecateInit.options },
 ): void {
   const { since, until, substitute, message } = options;
@@ -134,6 +134,12 @@ export function deprecationWarning(
                 [parentName, substitute].filter(Boolean).join("."),
               ))
             } instead.`
+            : typeof substitute === "function"
+            ? ` Please use ${
+              ansi.bold(ansi.underline(
+                [parentName, substitute.name].filter(Boolean).join("."),
+              ))
+            } instead.`
             : ""
         }`
     }${
@@ -170,13 +176,12 @@ export function deprecated(
     };
 
     Reflect.defineMetadata(
-      MetadataKeyDeprecated,
+      MetadataKey.Deprecated,
       data,
       target,
       propertyKey,
     );
 
-    const DeprecatedSymbol = Symbol.for(MetadataKeyDeprecated);
     const existingMetadata =
       Reflect.getOwnPropertyDescriptor(target, DeprecatedSymbol)?.value ?? {};
 
@@ -197,7 +202,7 @@ export function deprecated(
         {};
 
     const deprecatedData = Reflect.getMetadata(
-      MetadataKeyDeprecated,
+      MetadataKey.Deprecated,
       target,
       propertyKey,
     ) ?? metadataObject[propertyKey];
@@ -241,25 +246,31 @@ export function isDeprecated(
   descriptor?: PropertyDescriptor,
 ): boolean {
   if (target === undefined) return false;
+
+  descriptor ??= Reflect.getOwnPropertyDescriptor(target, key);
   if (descriptor?.value === undefined) return false;
+
+  if (
+    // check Metadata for this property key
+    Reflect.hasOwnMetadata(MetadataKey.Deprecated, target, key) ||
+    Reflect.hasMetadata(MetadataKey.Deprecated, target, key)
+  ) return true;
+
+  if (
+    // check if the target has the hidden deprecated property
+    Reflect.has(target, DeprecatedSymbol) &&
+    Reflect.has(Reflect.get(target, DeprecatedSymbol, target), key)
+  ) return true;
+
+  // last ditch effort:
+  // check descriptor name/toStringTag for _deprecated suffix
   if (typeof descriptor?.value === "function") {
     if (
       String(descriptor?.value?.name).endsWith("_deprecated") ||
       String(descriptor?.value?.[Symbol.toStringTag]).endsWith("_deprecated")
     ) return true;
   }
-  const DeprecatedSymbol = Symbol.for(MetadataKeyDeprecated);
-  const deprecatedList = (target as any)[DeprecatedSymbol] ?? {};
 
-  const hasDeprecatedMetadata = Reflect.hasMetadata(
-    MetadataKeyDeprecated,
-    target,
-    key,
-  );
-
-  return (
-    (deprecatedList && (key in deprecatedList)) ||
-    (DeprecatedSymbol in (target as any)?.[key] ?? {}) ||
-    (!!hasDeprecatedMetadata)
-  );
+  // nothing? then I guess it isn't deprecated.
+  return false;
 }

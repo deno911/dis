@@ -1,3 +1,5 @@
+import { getPropertyDescriptor } from "../prototypes.ts";
+
 import "https://deno.land/x/reflection@0.0.2/mod.ts";
 
 // @inspect decorator for functions and getters
@@ -22,8 +24,8 @@ export function inspect<T extends object>(
     key: string | symbol,
     descriptor?: PropertyDescriptor,
   ): void | any {
-    descriptor ??= Reflect.getOwnPropertyDescriptor(target, key)!;
-    const original = descriptor.value;
+    descriptor ??= getPropertyDescriptor(target, key)!;
+    const original = descriptor?.value;
 
     const logger = (result: any, args?: any[]) => {
       const name = ((target as any)?.name ?? "is") +
@@ -45,9 +47,11 @@ export function inspect<T extends object>(
         apply(t, thisArg, args) {
           if (typeof original === "function") {
             try {
+              const DEBUG = ("DEBUG" in Deno.env.toObject());
               const result = Reflect.apply(t, thisArg, args);
-              // if (Deno.env.get("DEBUG"))
-              logger(result, args);
+              if (DEBUG) {
+                logger(result, args);
+              }
               return result;
             } catch (error) {
               logger(error, args);
@@ -64,9 +68,11 @@ export function inspect<T extends object>(
       descriptor.get = new Proxy(original, {
         apply(t, thisArg, _a) {
           try {
+            const DEBUG = ("DEBUG" in Deno.env.toObject());
             const result = original ?? Reflect.apply(t, thisArg, []);
-            // if (Deno.env.get("DEBUG"))
-            logger(result);
+            if (DEBUG) {
+              logger(result);
+            }
             return result;
           } catch (error) {
             logger(error);
@@ -76,11 +82,7 @@ export function inspect<T extends object>(
     }
 
     descriptor.configurable = true;
-
     Reflect.defineProperty(target, key, descriptor);
-
-    if (arguments.length === 3) {
-      return descriptor;
-    }
+    if (arguments.length === 3) return descriptor;
   };
 }
