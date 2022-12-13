@@ -1,10 +1,14 @@
 import { Buffer, Buffer as DenoBuffer, NodeBuffer } from "./deps.ts";
+
 import type {
   AccessorDescriptor,
   ArrayAssertion,
   Class,
+  ConditionalExcept,
   DataDescriptor,
+  Except,
   Falsy,
+  Filter,
   Flatten,
   GetTypeName,
   MapIterator,
@@ -17,12 +21,13 @@ import type {
   TypedArray,
   TypeName,
 } from "./types.ts";
+
 import {
   deprecated,
-  formatPropertyDescriptors,
-  freeze,
+  enumerable,
   getObjectType,
-  inspect,
+  isAbsoluteMod2,
+  isDeprecated,
   isDomElement,
   isElement,
   isObjectOfType,
@@ -30,93 +35,95 @@ import {
   isPrimitiveTypeName,
   isSvgElement,
   isTypedArrayName,
+  isValidLength,
+  MetadataKey,
   predicateOnArray,
+  renameFunction,
 } from "./_util.ts";
-import {
-  type Assert,
-  AssertionTypeDescription,
-  type AssertOptions,
-} from "./assert.ts";
 
-/**
- * Determine the {@linkcode TypeName} of an arbitrary value of unknown type.
- *
- * @example
- * ```ts
- * import { is } from "https://deno.land/x/dis/mod.ts";
- *
- * getTypeName("🦕") // => "string"
- * getTypeName(100n) // => "bigint"
- * getTypeName({ foo: "bar" }) // => "Object"
- * getTypeName(new Uint8Array()) // => "Uint8Array"
- * ```
- */
-function getTypeName<T = unknown>(value: T) {
-  return ((value: unknown) => {
-    if (value === null) {
-      return "null";
-    }
+import { type Assert, AssertionTypeDescription } from "./assert.ts";
 
-    switch (typeof value) {
-      case "undefined":
-        return "undefined";
-      case "string":
-        return "string";
-      case "number":
-        return Number.isNaN(value) ? "NaN" : "number";
-      case "boolean":
-        return "boolean";
-      case "function":
-        return "Function";
-      case "bigint":
-        return "bigint";
-      case "symbol":
-        return "symbol";
-      default:
-    }
-
-    if (is.observable(value)) {
-      return "Observable";
-    }
-
-    if (is.array(value)) {
-      return "Array";
-    }
-
-    if (is.nodeBuffer(value)) {
-      return "Buffer";
-    }
-
-    if (is.denoBuffer(value)) {
-      return "Buffer";
-    }
-
-    if (is.boxedPrimitive(value)) {
-      throw new TypeError(
-        "Please don't use object wrappers for primitive types",
-      );
-    }
-
-    return getObjectType(value) ?? "Object";
-  })(value) as GetTypeName<T>;
-}
-
-const isAbsoluteMod2 =
-  (remainder: number) => (value: number): value is number =>
-    is.integer(value) && Math.abs(value % 2) === remainder;
-/**
- * Check if a value is of the valid length for its given type.
- * @param value
- * @returns `boolean`
- */
-const isValidLength = (value: unknown): value is number =>
-  is.safeInteger(value) && value >= 0;
+const IsNegated = Symbol.for(MetadataKey.Negated);
+const IsDeprecated = Symbol.for(MetadataKey.Deprecated);
+const DenoCustomInspect = Symbol.for("Deno.customInspect");
 
 /**
  * Check if a value is a given type, or retrieve its {@linkcode TypeName}.
  * @param value The value to check
  */
 class is {
+  static get [IsNegated](): boolean {
+    return Reflect.getOwnPropertyDescriptor(this, "__negated")?.value ?? false;
+  }
+
+  static set [IsNegated](value: boolean) {
+    Reflect.defineProperty(this, "__negated", {
+      configurable: true,
+      enumerable: false,
+      writable: false,
+      value,
+    });
+  }
+
+  @enumerable(true)
+  static get not() {
+    return createNegated.call(this as unknown as is, {
+      revocable: false,
+      sorted: true,
+      maskMethodNames: true,
+      toStringTag: "is.not",
+      excluded: ["__negated"],
+    }).proxy as unknown as isnt;
+  }
+
+  @enumerable(false)
+  static assertType<
+    Negated extends boolean = false,
+    Expected extends boolean = (Negated extends true ? false : true),
+  >(
+    condition: boolean,
+    description: string,
+    value: unknown,
+    options: {
+      multipleValues?: boolean;
+      negated?: Negated;
+    } = {
+      multipleValues: false,
+      negated: is[IsNegated] as Negated,
+    },
+  ): asserts condition is Negated extends true ? false : true {
+    const { multipleValues, negated } = options;
+
+    if (negated === true) {
+      description = `not ${description}`;
+      condition = !condition;
+      is[IsNegated] = false;
+    }
+
+    if (!condition) {
+      const values = [...new Set([value as any].flat())];
+      const msg = multipleValues
+        ? `values of types ${
+          values.map((v, i) =>
+            `${i === values.length - 1 ? "and " : ""}\`${is.typeName(v)}\``
+          ).join(", ")
+        }`
+        : `value of type \`${is.typeName(value)}\``;
+
+      throw new TypeError(
+        `Assertion Failure: Expected value \`${description}\`${
+          negated ? " (negated)" : ""
+        }. Received ${msg}.`,
+      );
+    }
+  }
+
+  static get assert(): Assert {
+    return assert as Assert;
+  }
+
+  // --------- //
+
   static string = function string(value: unknown): value is string {
     return isOfType<string>("string")(value);
   };
@@ -243,7 +250,6 @@ class is {
     return isOfType<Function>("function")(value);
   };
 
-  @inspect()
   static fn = function fn(value: unknown): value is Function {
     return isOfType<Function>("function")(value);
   };
@@ -555,39 +561,69 @@ class is {
     return Object.values(targetEnum as object).includes(value);
   };
 
-  static exact = function exact<T extends Record<string, unknown>, U extends T>(
-    obj: unknown,
+  static exact = function exact<T>(
     shape: T,
-  ): obj is U {
-    if (!is.nonEmptyObject(obj as U)) return false;
+    value: unknown,
+  ): value is T {
+    // in case we try to compare something other than an object
+    if (!is.object(value) || !is.object(shape)) {
+      return value === shape;
+    }
+    // just to save time
+    if (Object.is(shape, value)) {
+      return true;
+    }
     // forward comparison
-    if (!(is.subset(obj, shape) && is.superset(obj, shape))) return false;
-    // strict value type comparison
-    return (Object.entries(obj as U).every(([key, value]) => {
-      if (is.plainObject(value)) {
-        if (is.plainObject(shape[key])) {
-          // both values are objects, recurse their properties
-          return is.exact(value, shape[key] as Record<string, unknown>);
-        }
-        // shape value for this key is not an object; fails to match
-        return false;
+    if (is.subset(shape, value) && is.subset(value, shape)) {
+      if (
+        Object.entries(shape).every(([key, val]) =>
+          is.enumKey(key, value) && is.enumCase(val, value)
+        ) &&
+        Object.entries(value).every(([key, val]) =>
+          is.enumKey(key, shape) && is.enumCase(val, shape)
+        )
+      ) {
+        return true;
       }
-      // otherwise just check equality of types using getTypeName()
-      return getTypeName(value) === getTypeName(shape[key]);
-    }));
+      // strict value type comparison
+      return (Object.entries(value).every(([key, val]) => {
+        if (is.object(val) && is.object(shape[key as keyof T])) {
+          // both values are objects, recurse their properties
+          return is.exact(val, shape[key as keyof T]);
+        }
+        // otherwise just check equality of types using getTypeName()
+        return getTypeName(val) === getTypeName(shape[key as keyof T]);
+      }));
+    }
+
+    return false;
   };
 
   /**
    * Determines if an object is a **subset** of another (the "shape" object).
-   * The target object **may not** have any keys that aren't present in the
-   * shape. However, it does not need to have ***all*** of the shape's keys.
+   * The target object may not have any keys that are not also in the shape,
+   * but it's okay if it only has _some_ of the shape's keys.
+   * Think of the **_shape_ as an _extension_ of the _target_**.
    *
    * @template T
    * @param shape The object used as a schema shape to compare against
-   * @param obj The target object to inspect
+   * @param value The target object to inspect
    * @returns `true` if the target is a subset of the shape, `false` otherwise
    *
    * @see {@linkcode is.superset} for a typecheck that is the opposite of this.
+   *
+   * For example, consider the following shape and valid/invalid subsets:
+   *
+   * @example
+   * ```ts
+   * const shape = { name: "", age: 0, email: "" };
+   *
+   * const valid = { name: "Nick", age: 29 };
+   * is.subset(shape, valid) // => true
+   *
+   * const wrong = { name: "Nick", city: "Las Vegas" };
+   * is.subset(shape, wrong) // => false
+   * ```
    *
    * @example
    * ```ts
@@ -605,14 +641,14 @@ class is {
    * ) // => TRUE - target is missing `b`, but all other keys are in the shape!
    * ```
    */
-  static subset = function subset<T extends Record<string, unknown>>(
-    obj: unknown,
+  static subset = function subset<T extends {}>(
     shape: T,
-  ): obj is {
-    [K in keyof T as (typeof obj)[K] extends never ? never : K]: unknown;
+    value: unknown,
+  ): value is {
+    [K in keyof T as (typeof value)[K] extends never ? never : K]: unknown;
   } {
-    if (is.nonEmptyObject(shape) && is.nonEmptyObject(obj)) {
-      if (Object.keys(obj).every((key) => key in shape)) {
+    if (is.nonEmptyObject(shape) && is.nonEmptyObject(value)) {
+      if (Object.keys(value).every((key) => key in shape)) {
         return true;
       }
     }
@@ -620,16 +656,16 @@ class is {
   };
 
   /**
-   * Determines if an object is a **superset** of a given "shape". The object
-   * must have **all** of the keys in the shape, but (unlike the
-   * {@link is.subset} typecheck) it may also have other keys/properties that
-   * are not defined in the shape object. Another way to think of this is that
-   * the target object is an **_extension_** of the shape object.
+   * Determines if an object is a **superset** of a given "shape". The object,
+   * unlike the {@link is.subset} typecheck, must have **all** of the keys in
+   * the shape. However, it **_can_ have keys that _are not_ in the shape**.
+   *
+   * Think of the **_target_ as an _extension_ of the _shape_**.
    *
    * @template T
    * @param shape The object used as a "schema" to compare against
-   * @param obj The target object to inspect
-   * @returns `true` if the target is a superset of the shape, `false` otherwise
+   * @param value The target object to inspect
+   * @returns `true` if the value is a superset of the shape, `false` otherwise
    *
    * @see {@linkcode is.subset} for a typecheck that is the opposite of this.
    *
@@ -638,7 +674,7 @@ class is {
    * is.superset(
    *   { a: 0, b: 0 }, // the schema/shape object
    *   { a: 1, b: 2, c: 3 }, // the target object
-   * ) // => TRUE - target has all the keys as required by the shape
+   * ) // => TRUE - target has all keys required by the shape
    * ```
    *
    * @example
@@ -646,15 +682,15 @@ class is {
    * is.superset(
    *   { a: 1, b: 2, c: 3 }, // shape
    *   { a: 1, c: 3, d: 4 }, // target
-   * ) // => FALSE - target has an unknown key not defined by the shape!
+   * ) // => FALSE - target is missing `b` from the shape
    * ```
    */
-  static superset = function superset<T extends Record<string, unknown>>(
-    obj: unknown,
+  static superset = function superset<T extends object>(
     shape: T,
-  ): obj is { [K in keyof T]: unknown } & { [x: string]: unknown } {
-    if (is.nonEmptyObject(shape) && is.nonEmptyObject(obj)) {
-      if (Object.keys(shape).every((key) => key in obj)) {
+    value: unknown,
+  ): value is { [K in keyof T]-?: any } & object {
+    if (is.nonEmptyObject(shape) && is.nonEmptyObject(value)) {
+      if (Object.keys(shape).every((key) => key in value)) {
         return true;
       }
     }
@@ -1174,7 +1210,6 @@ class is {
     return is.string(value) && value.length > 0;
   };
 
-  // TODO: Use `not ''` when the `not` operator is available.
   static nonEmptyStringAndNotWhitespace =
     function nonEmptyStringAndNotWhitespace(
       value: unknown,
@@ -1226,25 +1261,27 @@ class is {
     );
   };
 
+  static typeName(value: unknown) {
+    return getTypeName(value) as TypeName;
+  }
+
   /** @deprecated use {@linkcode is.function} instead */
-  @deprecated({ since: "0.1.0", substitute: "function" })
+  @deprecated({ since: "0.1.0", substitute: is.function })
   static function_(value: unknown): value is Function {
     return isOfType<Function>("function")(value);
   }
 
   /** @deprecated use {@linkcode is.class} instead */
-  @deprecated({ since: "0.1.0", substitute: "class" })
-  static class_ = <T>(value: unknown): value is Class<T> => is.class(value);
+  @deprecated({ since: "0.1.0", substitute: is.class })
+  static class_<T>(value: unknown): value is Class<T> {
+    return is.class(value);
+  }
 
-  /**
-   * @deprecated use {@linkcode is.null} instead
-   */
-  @deprecated({ since: "0.1.0", substitute: "null" })
-  static null_ = (value: unknown): value is null => value === null;
-
-  static typeName = function typeName(value: unknown) {
-    return getTypeName(value) as TypeName;
-  };
+  /** @deprecated use {@linkcode is.null} instead */
+  @deprecated({ since: "0.1.0", substitute: "is.null" })
+  static null_(value: unknown): value is null {
+    return value === null;
+  }
 
   static [Symbol.for("Deno.customInspect")](inspect: typeof Deno.inspect) {
     const options: Deno.InspectOptions = {
@@ -1254,7 +1291,7 @@ class is {
       getters: true,
       showHidden: false,
       showProxy: false,
-      sorted: true,
+      sorted: false,
       trailingComma: true,
     };
 
@@ -1263,49 +1300,23 @@ class is {
 }
 
 /* Type Assertions */
-const assertType = (
-  condition: boolean,
-  description: string,
-  value: unknown,
-  options: { multipleValues?: boolean } = {},
-): asserts condition => {
-  if (!condition) {
-    const { multipleValues } = options;
-    const valuesMessage = multipleValues
-      ? `received values of types ${
-        [
-          ...new Set(
-            (value as any[]).map((singleValue) =>
-              `\`${getTypeName(singleValue)}\``
-            ),
-          ),
-        ].join(", ")
-      }`
-      : `received value of type \`${getTypeName(value)}\``;
 
-    throw new TypeError(
-      `Expected value which is \`${description}\`, ${valuesMessage}.`,
-    );
-  }
-};
-
-@freeze
 class Assertions {
   // Unknowns.
   static undefined = function (
     value: unknown,
   ): asserts value is undefined {
-    return assertType(is.undefined(value), "undefined", value);
+    return is.assertType(is.undefined(value), "undefined", value);
   };
 
   static null = function (value: unknown): asserts value is null {
-    return assertType(is.null(value), "null", value);
+    return is.assertType(is.null(value), "null", value);
   };
 
   static nullOrUndefined = function nullOrUndefined(
     value: unknown,
   ): asserts value is null | undefined {
-    return assertType(
+    return is.assertType(
       is.nullOrUndefined(value),
       AssertionTypeDescription.nullOrUndefined,
       value,
@@ -1313,25 +1324,25 @@ class Assertions {
   };
 
   static string = function string(value: unknown): asserts value is string {
-    return assertType(is.string(value), "string", value);
+    return is.assertType(is.string(value), "string", value);
   };
 
   static number = function number(value: unknown): asserts value is number {
-    return assertType(is.number(value), "number", value);
+    return is.assertType(is.number(value), "number", value);
   };
 
   static bigint = function bigint(value: unknown): asserts value is bigint {
-    return assertType(is.bigint(value), "bigint", value);
+    return is.assertType(is.bigint(value), "bigint", value);
   };
 
   static function = function (value: unknown): asserts value is Function {
-    return assertType(is.function(value), "Function", value);
+    return is.assertType(is.function(value), "Function", value);
   };
 
   static class = function <P = unknown>(
     value: unknown,
   ): asserts value is Class<P> {
-    return assertType(
+    return is.assertType(
       is.class<P>(value),
       AssertionTypeDescription.class_,
       value,
@@ -1341,7 +1352,7 @@ class Assertions {
   static nullish = function nullish(
     value: unknown,
   ): asserts value is null | undefined {
-    return assertType(
+    return is.assertType(
       is.nullish(value),
       AssertionTypeDescription.nullish,
       value,
@@ -1349,29 +1360,37 @@ class Assertions {
   };
 
   static object = function object(value: unknown): asserts value is object {
-    return assertType(is.object(value), "Object", value);
+    return is.assertType(is.object(value), "Object", value);
   };
 
   static boolean = function boolean(value: unknown): asserts value is boolean {
-    return assertType(is.boolean(value), "boolean", value);
+    return is.assertType(is.boolean(value), "boolean", value);
   };
 
   static symbol = function symbol(value: unknown): asserts value is symbol {
-    return assertType(is.symbol(value), "symbol", value);
+    return is.assertType(is.symbol(value), "symbol", value);
   };
 
   static truthy = function truthy(value: unknown): asserts value is unknown {
-    return assertType(is.truthy(value), AssertionTypeDescription.truthy, value);
+    return is.assertType(
+      is.truthy(value),
+      AssertionTypeDescription.truthy,
+      value,
+    );
   };
 
   static falsy = function falsy(value: unknown): asserts value is unknown {
-    return assertType(is.falsy(value), AssertionTypeDescription.falsy, value);
+    return is.assertType(
+      is.falsy(value),
+      AssertionTypeDescription.falsy,
+      value,
+    );
   };
 
   static primitive = function primitive(
     value: unknown,
   ): asserts value is Primitive {
-    return assertType(
+    return is.assertType(
       is.primitive(value),
       AssertionTypeDescription.primitive,
       value,
@@ -1381,7 +1400,7 @@ class Assertions {
   static boxedPrimitive = function boxedPrimitive(
     value: unknown,
   ): asserts value is object {
-    return assertType(is.boxedPrimitive(value), "BoxedPrimitive", value);
+    return is.assertType(is.boxedPrimitive(value), "BoxedPrimitive", value);
   };
 
   static array = function array<T = unknown>(
@@ -1392,7 +1411,7 @@ class Assertions {
       condition: boolean,
       description: string,
       value: unknown,
-    ) => asserts condition = assertType;
+    ) => asserts condition = is.assertType;
 
     assert(is.array(value), "Array", value);
 
@@ -1404,7 +1423,7 @@ class Assertions {
   static iterable = function iterable<T = unknown>(
     value: unknown,
   ): asserts value is Iterable<T> {
-    return assertType(
+    return is.assertType(
       is.iterable(value),
       AssertionTypeDescription.iterable,
       value,
@@ -1414,7 +1433,7 @@ class Assertions {
   static asyncIterable = function asyncIterable<T = unknown>(
     value: unknown,
   ): asserts value is AsyncIterable<T> {
-    return assertType(
+    return is.assertType(
       is.asyncIterable(value),
       AssertionTypeDescription.asyncIterable,
       value,
@@ -1424,19 +1443,19 @@ class Assertions {
   static generator = function generator(
     value: unknown,
   ): asserts value is Generator {
-    return assertType(is.generator(value), "Generator", value);
+    return is.assertType(is.generator(value), "Generator", value);
   };
 
   static asyncGenerator = function asyncGenerator(
     value: unknown,
   ): asserts value is AsyncGenerator {
-    return assertType(is.asyncGenerator(value), "AsyncGenerator", value);
+    return is.assertType(is.asyncGenerator(value), "AsyncGenerator", value);
   };
 
   static nativePromise = function nativePromise<T = unknown>(
     value: unknown,
   ): asserts value is Promise<T> {
-    return assertType(
+    return is.assertType(
       is.nativePromise(value),
       AssertionTypeDescription.nativePromise,
       value,
@@ -1446,19 +1465,23 @@ class Assertions {
   static promise = function promise<T = unknown>(
     value: unknown,
   ): asserts value is Promise<T> {
-    return assertType(is.promise(value), "Promise", value);
+    return is.assertType(is.promise(value), "Promise", value);
   };
 
   static generatorFunction = function generatorFunction(
     value: unknown,
   ): asserts value is GeneratorFunction {
-    return assertType(is.generatorFunction(value), "GeneratorFunction", value);
+    return is.assertType(
+      is.generatorFunction(value),
+      "GeneratorFunction",
+      value,
+    );
   };
 
   static asyncGeneratorFunction = function asyncGeneratorFunction(
     value: unknown,
   ): asserts value is AsyncGeneratorFunction {
-    return assertType(
+    return is.assertType(
       is.asyncGeneratorFunction(value),
       "AsyncGeneratorFunction",
       value,
@@ -1468,20 +1491,20 @@ class Assertions {
   static asyncFunction = function asyncFunction(
     value: unknown,
   ): asserts value is Function {
-    return assertType(is.asyncFunction(value), "AsyncFunction", value);
+    return is.assertType(is.asyncFunction(value), "AsyncFunction", value);
   };
 
   static boundFunction = function boundFunction(
     value: unknown,
   ): asserts value is Function {
-    return assertType(is.boundFunction(value), "Function", value);
+    return is.assertType(is.boundFunction(value), "Function", value);
   };
 
   static directInstanceOf = function directInstanceOf<T>(
     instance: unknown,
     class_: Class<T>,
   ): asserts instance is T {
-    return assertType(
+    return is.assertType(
       is.directInstanceOf(instance, class_),
       AssertionTypeDescription.directInstanceOf,
       instance,
@@ -1492,7 +1515,7 @@ class Assertions {
     instance: unknown,
     class_: Class<T>,
   ): asserts instance is T {
-    return assertType(
+    return is.assertType(
       is.instanceOf(instance, class_),
       AssertionTypeDescription.directInstanceOf,
       instance,
@@ -1500,27 +1523,27 @@ class Assertions {
   };
 
   static regExp = function regExp(value: unknown): asserts value is RegExp {
-    return assertType(is.regExp(value), "RegExp", value);
+    return is.assertType(is.regExp(value), "RegExp", value);
   };
 
   static date = function date(value: unknown): asserts value is Date {
-    return assertType(is.date(value), "Date", value);
+    return is.assertType(is.date(value), "Date", value);
   };
 
   static error = function error(value: unknown): asserts value is Error {
-    return assertType(is.error(value), "Error", value);
+    return is.assertType(is.error(value), "Error", value);
   };
 
   static map = function map<Key = unknown, Value = unknown>(
     value: unknown,
   ): asserts value is Map<Key, Value> {
-    return assertType(is.map(value), "Map", value);
+    return is.assertType(is.map(value), "Map", value);
   };
 
   static set = function set<T = unknown>(
     value: unknown,
   ): asserts value is Set<T> {
-    return assertType(is.set(value), "Set", value);
+    return is.assertType(is.set(value), "Set", value);
   };
 
   static weakMap = function weakMap<
@@ -1529,25 +1552,25 @@ class Assertions {
   >(
     value: unknown,
   ): asserts value is WeakMap<Key, Value> {
-    return assertType(is.weakMap(value), "WeakMap", value);
+    return is.assertType(is.weakMap(value), "WeakMap", value);
   };
 
   static weakSet = function weakSet<T extends object = object>(
     value: unknown,
   ): asserts value is WeakSet<T> {
-    return assertType(is.weakSet(value), "WeakSet", value);
+    return is.assertType(is.weakSet(value), "WeakSet", value);
   };
 
   static weakRef = function weakRef<T extends object = object>(
     value: unknown,
   ): asserts value is WeakRef<T> {
-    return assertType(is.weakRef(value), "WeakRef", value);
+    return is.assertType(is.weakRef(value), "WeakRef", value);
   };
 
   static arrayLike = function arrayLike<T = unknown>(
     value: unknown,
   ): asserts value is ArrayLike<T> {
-    return assertType(
+    return is.assertType(
       is.arrayLike(value),
       AssertionTypeDescription.arrayLike,
       value,
@@ -1557,25 +1580,25 @@ class Assertions {
   static mapIterator = function mapIterator<T = unknown>(
     value: unknown,
   ): asserts value is MapIterator {
-    return assertType(is.mapIterator(value), "Map Iterator", value);
+    return is.assertType(is.mapIterator(value), "Map Iterator", value);
   };
 
   static setIterator = function setIterator<T = unknown>(
     value: unknown,
   ): asserts value is SetIterator {
-    return assertType(is.setIterator(value), "Set Iterator", value);
+    return is.assertType(is.setIterator(value), "Set Iterator", value);
   };
 
   static namespaceModule = function namespaceModule(
     value: unknown,
   ): asserts value is Module {
-    return assertType(is.namespaceModule(value), "Module", value);
+    return is.assertType(is.namespaceModule(value), "Module", value);
   };
 
   static plainObject = <Value = unknown>(
     value: unknown,
   ): asserts value is Record<string, Value> =>
-    assertType(
+    is.assertType(
       is.plainObject(value),
       AssertionTypeDescription.plainObject,
       value,
@@ -1584,13 +1607,13 @@ class Assertions {
   static propertyKey = function propertyKey(
     value: unknown,
   ): asserts value is number {
-    return assertType(is.propertyKey(value), "PropertyKey", value);
+    return is.assertType(is.propertyKey(value), "PropertyKey", value);
   };
 
   static propertyDescriptor = <T = unknown>(
     value: unknown,
   ): asserts value is TypedPropertyDescriptor<T> =>
-    assertType(
+    is.assertType(
       is.propertyDescriptor(value),
       "PropertyDescriptor",
       value,
@@ -1599,12 +1622,12 @@ class Assertions {
   static accessorDescriptor = <T = unknown>(
     value: unknown,
   ): asserts value is AccessorDescriptor<T> =>
-    assertType(is.accessorDescriptor(value), "AccessorDescriptor", value);
+    is.assertType(is.accessorDescriptor(value), "AccessorDescriptor", value);
 
   static dataDescriptor = <T = unknown>(
     value: unknown,
   ): asserts value is DataDescriptor<T> =>
-    assertType(is.dataDescriptor(value), "DataDescriptor", value);
+    is.assertType(is.dataDescriptor(value), "DataDescriptor", value);
 
   static key = <
     T extends readonly unknown[] | Record<PropertyKey, unknown> = {},
@@ -1612,7 +1635,7 @@ class Assertions {
     value: unknown,
     target: T,
   ): asserts value is keyof T =>
-    assertType(is.key(value, target), "Key", value);
+    is.assertType(is.key(value, target), "Key", value);
 
   static value = <
     T extends readonly unknown[] | Record<PropertyKey, unknown> = {},
@@ -1620,24 +1643,24 @@ class Assertions {
     value: unknown,
     target: T,
   ): asserts value is T[keyof T] =>
-    assertType(is.value(value, target), "Value", value);
+    is.assertType(is.value(value, target), "Value", value);
 
   static enumKey = <T = unknown>(
     value: unknown,
     targetEnum: T,
   ): asserts value is keyof T =>
-    assertType(is.enumKey(value, targetEnum), "EnumKey", value);
+    is.assertType(is.enumKey(value, targetEnum), "EnumKey", value);
 
   static enumCase = <T = unknown>(
     value: unknown,
     targetEnum: T,
   ): asserts value is T[keyof T] =>
-    assertType(is.enumCase(value, targetEnum), "EnumCase", value);
+    is.assertType(is.enumCase(value, targetEnum), "EnumCase", value);
 
   static entry = <K = unknown, V = unknown>(
     value: unknown,
   ): asserts value is readonly [K, V] =>
-    assertType(
+    is.assertType(
       is.entry(value),
       AssertionTypeDescription.entry,
       value,
@@ -1646,21 +1669,21 @@ class Assertions {
   static entries = <K = unknown, V = unknown>(
     value: unknown,
   ): asserts value is readonly (readonly [K, V])[] =>
-    assertType(
+    is.assertType(
       is.entries(value),
       AssertionTypeDescription.entries,
       value,
     );
 
   static sparseArray = (value: unknown): asserts value is unknown[] =>
-    assertType(
+    is.assertType(
       is.sparseArray(value),
       AssertionTypeDescription.sparseArray,
       value,
     );
 
   static typedArray = (value: unknown): asserts value is TypedArray =>
-    assertType(
+    is.assertType(
       is.typedArray(value),
       AssertionTypeDescription.typedArray,
       value,
@@ -1669,101 +1692,101 @@ class Assertions {
   static int8Array = function int8Array(
     value: unknown,
   ): asserts value is Int8Array {
-    return assertType(is.int8Array(value), "Int8Array", value);
+    return is.assertType(is.int8Array(value), "Int8Array", value);
   };
 
   static uint8Array = function uint8Array(
     value: unknown,
   ): asserts value is Uint8Array {
-    return assertType(is.uint8Array(value), "Uint8Array", value);
+    return is.assertType(is.uint8Array(value), "Uint8Array", value);
   };
 
   static uint8ClampedArray = (
     value: unknown,
   ): asserts value is Uint8ClampedArray =>
-    assertType(is.uint8ClampedArray(value), "Uint8ClampedArray", value);
+    is.assertType(is.uint8ClampedArray(value), "Uint8ClampedArray", value);
 
   static int16Array = function int16Array(
     value: unknown,
   ): asserts value is Int16Array {
-    return assertType(is.int16Array(value), "Int16Array", value);
+    return is.assertType(is.int16Array(value), "Int16Array", value);
   };
 
   static uint16Array = function uint16Array(
     value: unknown,
   ): asserts value is Uint16Array {
-    return assertType(is.uint16Array(value), "Uint16Array", value);
+    return is.assertType(is.uint16Array(value), "Uint16Array", value);
   };
 
   static int32Array = function int32Array(
     value: unknown,
   ): asserts value is Int32Array {
-    return assertType(is.int32Array(value), "Int32Array", value);
+    return is.assertType(is.int32Array(value), "Int32Array", value);
   };
 
   static uint32Array = function uint32Array(
     value: unknown,
   ): asserts value is Uint32Array {
-    return assertType(is.uint32Array(value), "Uint32Array", value);
+    return is.assertType(is.uint32Array(value), "Uint32Array", value);
   };
 
   static float32Array = function float32Array(
     value: unknown,
   ): asserts value is Float32Array {
-    return assertType(is.float32Array(value), "Float32Array", value);
+    return is.assertType(is.float32Array(value), "Float32Array", value);
   };
 
   static float64Array = function float64Array(
     value: unknown,
   ): asserts value is Float64Array {
-    return assertType(is.float64Array(value), "Float64Array", value);
+    return is.assertType(is.float64Array(value), "Float64Array", value);
   };
 
   static bigInt64Array = function bigInt64Array(
     value: unknown,
   ): asserts value is BigInt64Array {
-    return assertType(is.bigInt64Array(value), "BigInt64Array", value);
+    return is.assertType(is.bigInt64Array(value), "BigInt64Array", value);
   };
 
   static bigUint64Array = function bigUint64Array(
     value: unknown,
   ): asserts value is BigUint64Array {
-    return assertType(is.bigUint64Array(value), "BigUint64Array", value);
+    return is.assertType(is.bigUint64Array(value), "BigUint64Array", value);
   };
 
   static arrayBuffer = function arrayBuffer(
     value: unknown,
   ): asserts value is ArrayBuffer {
-    return assertType(is.arrayBuffer(value), "ArrayBuffer", value);
+    return is.assertType(is.arrayBuffer(value), "ArrayBuffer", value);
   };
 
   static dataView = function dataView(
     value: unknown,
   ): asserts value is DataView {
-    return assertType(is.dataView(value), "DataView", value);
+    return is.assertType(is.dataView(value), "DataView", value);
   };
 
   static sharedArrayBuffer = (
     value: unknown,
   ): asserts value is SharedArrayBuffer =>
-    assertType(is.sharedArrayBuffer(value), "SharedArrayBuffer", value);
+    is.assertType(is.sharedArrayBuffer(value), "SharedArrayBuffer", value);
 
   static domElement = (value: unknown): asserts value is HTMLElement =>
-    assertType(
+    is.assertType(
       is.domElement(value),
       AssertionTypeDescription.domElement,
       value,
     );
 
   static element = (value: unknown): asserts value is Element =>
-    assertType(
+    is.assertType(
       is.element(value),
       AssertionTypeDescription.domElement,
       value,
     );
 
   static svgElement = (value: unknown): asserts value is SVGElement =>
-    assertType(
+    is.assertType(
       is.svgElement(value),
       AssertionTypeDescription.svgElement,
       value,
@@ -1772,73 +1795,73 @@ class Assertions {
   static observable = function observable(
     value: unknown,
   ): asserts value is ObservableLike {
-    return assertType(is.observable(value), "Observable", value);
+    return is.assertType(is.observable(value), "Observable", value);
   };
 
   static nodeStream = (value: unknown): asserts value is NodeJS.Stream =>
-    assertType(
+    is.assertType(
       is.nodeStream(value),
       AssertionTypeDescription.nodeStream,
       value,
     );
 
   static buffer = function buffer(value: unknown): asserts value is Buffer {
-    return assertType(is.buffer(value), "Buffer", value);
+    return is.assertType(is.buffer(value), "Buffer", value);
   };
 
   static blob = function blob(value: unknown): asserts value is Blob {
-    return assertType(is.blob(value), "Blob", value);
+    return is.assertType(is.blob(value), "Blob", value);
   };
 
   static formData = function formData(
     value: unknown,
   ): asserts value is FormData {
-    return assertType(is.formData(value), "FormData", value);
+    return is.assertType(is.formData(value), "FormData", value);
   };
 
   static headers = function headers(value: unknown): asserts value is Headers {
-    return assertType(is.headers(value), "Headers", value);
+    return is.assertType(is.headers(value), "Headers", value);
   };
 
   static request = function request(value: unknown): asserts value is Request {
-    return assertType(is.request(value), "Request", value);
+    return is.assertType(is.request(value), "Request", value);
   };
 
   static response = function response(
     value: unknown,
   ): asserts value is Response {
-    return assertType(is.response(value), "Response", value);
+    return is.assertType(is.response(value), "Response", value);
   };
 
   static urlSearchParams = (
     value: unknown,
   ): asserts value is URLSearchParams =>
-    assertType(is.urlSearchParams(value), "URLSearchParams", value);
+    is.assertType(is.urlSearchParams(value), "URLSearchParams", value);
 
   static urlInstance = function urlInstance(
     value: unknown,
   ): asserts value is URL {
-    return assertType(is.urlInstance(value), "URL", value);
+    return is.assertType(is.urlInstance(value), "URL", value);
   };
 
   static urlString = (value: unknown): asserts value is string =>
-    assertType(
+    is.assertType(
       is.urlString(value),
       AssertionTypeDescription.urlString,
       value,
     );
 
   static url = function url(value: unknown): asserts value is string | URL {
-    return assertType(is.url(value), AssertionTypeDescription.url, value);
+    return is.assertType(is.url(value), AssertionTypeDescription.url, value);
   };
 
   // Numbers.
   static nan = function nan(value: unknown): asserts value is unknown {
-    return assertType(is.nan(value), AssertionTypeDescription.nan, value);
+    return is.assertType(is.nan(value), AssertionTypeDescription.nan, value);
   };
 
   static integer = function integer(value: unknown): asserts value is number {
-    return assertType(
+    return is.assertType(
       is.integer(value),
       AssertionTypeDescription.integer,
       value,
@@ -1846,28 +1869,28 @@ class Assertions {
   };
 
   static safeInteger = (value: unknown): asserts value is number =>
-    assertType(
+    is.assertType(
       is.safeInteger(value),
       AssertionTypeDescription.safeInteger,
       value,
     );
 
   static evenInteger = (value: number): asserts value is number =>
-    assertType(
+    is.assertType(
       is.evenInteger(value),
       AssertionTypeDescription.evenInteger,
       value,
     );
 
   static oddInteger = (value: number): asserts value is number =>
-    assertType(
+    is.assertType(
       is.oddInteger(value),
       AssertionTypeDescription.oddInteger,
       value,
     );
 
   static infinite = function infinite(value: unknown): asserts value is number {
-    return assertType(
+    return is.assertType(
       is.infinite(value),
       AssertionTypeDescription.infinite,
       value,
@@ -1875,7 +1898,7 @@ class Assertions {
   };
 
   static numericString = (value: unknown): asserts value is string =>
-    assertType(
+    is.assertType(
       is.numericString(value),
       AssertionTypeDescription.numericString,
       value,
@@ -1885,14 +1908,14 @@ class Assertions {
     value: number,
     range: number | number[],
   ): asserts value is number =>
-    assertType(
+    is.assertType(
       is.inRange(value, range),
       AssertionTypeDescription.inRange,
       value,
     );
 
   static emptyArray = (value: unknown): asserts value is never[] =>
-    assertType(
+    is.assertType(
       is.emptyArray(value),
       AssertionTypeDescription.emptyArray,
       value,
@@ -1901,7 +1924,7 @@ class Assertions {
   static emptySet = function emptySet(
     value: unknown,
   ): asserts value is Set<never> {
-    return assertType(
+    return is.assertType(
       is.emptySet(value),
       AssertionTypeDescription.emptySet,
       value,
@@ -1911,7 +1934,7 @@ class Assertions {
   static emptyMap = function emptyMap(
     value: unknown,
   ): asserts value is Map<never, never> {
-    return assertType(
+    return is.assertType(
       is.emptyMap(value),
       AssertionTypeDescription.emptyMap,
       value,
@@ -1921,21 +1944,21 @@ class Assertions {
   static emptyObject = <Key extends keyof any = string>(
     value: unknown,
   ): asserts value is Record<Key, never> =>
-    assertType(
+    is.assertType(
       is.emptyObject(value),
       AssertionTypeDescription.emptyObject,
       value,
     );
 
   static emptyString = (value: unknown): asserts value is "" =>
-    assertType(
+    is.assertType(
       is.emptyString(value),
       AssertionTypeDescription.emptyString,
       value,
     );
 
   static whitespace = (value: unknown): asserts value is string =>
-    assertType(
+    is.assertType(
       is.whitespace(value),
       AssertionTypeDescription.whitespace,
       value,
@@ -1944,7 +1967,7 @@ class Assertions {
   static emptyStringOrWhitespace = (
     value: unknown,
   ): asserts value is string =>
-    assertType(
+    is.assertType(
       is.emptyStringOrWhitespace(value),
       AssertionTypeDescription.emptyStringOrWhitespace,
       value,
@@ -1953,7 +1976,7 @@ class Assertions {
   static nonEmptyArray = (
     value: unknown,
   ): asserts value is [unknown, ...unknown[]] =>
-    assertType(
+    is.assertType(
       is.nonEmptyArray(value),
       AssertionTypeDescription.nonEmptyArray,
       value,
@@ -1962,7 +1985,7 @@ class Assertions {
   static nonEmptySet = <T = unknown>(
     value: unknown,
   ): asserts value is Set<T> =>
-    assertType(
+    is.assertType(
       is.nonEmptySet(value),
       AssertionTypeDescription.nonEmptySet,
       value,
@@ -1971,7 +1994,7 @@ class Assertions {
   static nonEmptyMap = <Key = unknown, Value = unknown>(
     value: unknown,
   ): asserts value is Map<Key, Value> =>
-    assertType(
+    is.assertType(
       is.nonEmptyMap(value),
       AssertionTypeDescription.nonEmptyMap,
       value,
@@ -1980,14 +2003,14 @@ class Assertions {
   static nonEmptyObject = <Key extends keyof any = string, Value = unknown>(
     value: unknown,
   ): asserts value is Record<Key, Value> =>
-    assertType(
+    is.assertType(
       is.nonEmptyObject(value),
       AssertionTypeDescription.nonEmptyObject,
       value,
     );
 
   static nonEmptyString = (value: unknown): asserts value is string =>
-    assertType(
+    is.assertType(
       is.nonEmptyString(value),
       AssertionTypeDescription.nonEmptyString,
       value,
@@ -1996,7 +2019,7 @@ class Assertions {
   static nonEmptyStringAndNotWhitespace = (
     value: unknown,
   ): asserts value is string =>
-    assertType(
+    is.assertType(
       is.nonEmptyStringAndNotWhitespace(value),
       AssertionTypeDescription.nonEmptyStringAndNotWhitespace,
       value,
@@ -2007,7 +2030,7 @@ class Assertions {
     predicate: Predicate | Predicate[],
     ...values: unknown[]
   ): void | never =>
-    assertType(
+    is.assertType(
       is.any(predicate, ...values),
       AssertionTypeDescription.any,
       values,
@@ -2018,7 +2041,7 @@ class Assertions {
     predicate: Predicate | Predicate[],
     ...values: unknown[]
   ): void | never =>
-    assertType(
+    is.assertType(
       is.all(predicate, ...values),
       AssertionTypeDescription.all,
       values,
@@ -2029,7 +2052,7 @@ class Assertions {
     predicate: Predicate | Predicate[],
     ...values: unknown[]
   ): void | never =>
-    assertType(
+    is.assertType(
       is.every(predicate, ...values),
       AssertionTypeDescription.every,
       values,
@@ -2040,7 +2063,7 @@ class Assertions {
     predicate: Predicate | Predicate[],
     ...values: unknown[]
   ): void | never =>
-    assertType(
+    is.assertType(
       is.some(predicate, ...values),
       AssertionTypeDescription.some,
       values,
@@ -2051,7 +2074,7 @@ class Assertions {
     predicate: Predicate | Predicate[],
     ...values: unknown[]
   ): void | never =>
-    assertType(
+    is.assertType(
       is.none(predicate, ...values),
       AssertionTypeDescription.none,
       values,
@@ -2061,22 +2084,27 @@ class Assertions {
   /** @deprecated use {@linkcode assert.function} instead */
   @deprecated({
     since: "0.1.0",
-    substitute: "function",
+    substitute: Assertions.function,
     hide: true,
     seal: true,
   })
   static function_ = function function_(
     value: unknown,
   ): asserts value is Function {
-    return assertType(is.function(value), "Function", value);
+    return is.assertType(is.function(value), "Function", value);
   };
 
   /** @deprecated use {@linkcode assert.class} instead */
-  @deprecated({ since: "0.1.0", substitute: "class", hide: true, seal: true })
+  @deprecated({
+    since: "0.1.0",
+    substitute: Assertions.class,
+    hide: true,
+    seal: true,
+  })
   static class_ = function class_<P = unknown>(
     value: unknown,
   ): asserts value is Class<P> {
-    return assertType(
+    return is.assertType(
       is.class<P>(value),
       AssertionTypeDescription.class_,
       value,
@@ -2084,12 +2112,17 @@ class Assertions {
   };
 
   /** @deprecated use {@linkcode assert.null} instead */
-  @deprecated({ since: "0.1.0", substitute: "null", hide: true, seal: true })
+  @deprecated({
+    since: "0.1.0",
+    substitute: Assertions.null,
+    hide: true,
+    seal: true,
+  })
   static null_ = function null_(value: unknown): asserts value is null {
-    return assertType(is.null(value), "null", value);
+    return is.assertType(is.null(value), "null", value);
   };
 
-  static [Symbol.for("Deno.customInspect")](inspect: typeof Deno.inspect) {
+  static [DenoCustomInspect](inspect: typeof Deno.inspect) {
     const options: Deno.InspectOptions = {
       colors: true,
       compact: true,
@@ -2109,63 +2142,323 @@ class Assertions {
  * Type Assertions. If conditions are not as expected, throws a TypeError.
  */
 const assert: Assert = Object.assign(
-  function assert(
-    condition: boolean,
-    value: unknown,
-    message?: unknown,
-    options?: AssertOptions,
-  ): asserts condition {
-    if (!condition) {
-      if (is.undefined(message) && is.undefined(options)) {
-        if (is.string(value)) {
-          throw new TypeError(`Assertion Failure: ${String(value)}`);
-        }
-      }
-      const { multipleValues = false } = (options || {});
-      const values = [...new Set([value as any].flat())];
-      const msg = multipleValues
-        ? `values of types ${
-          values.map((v, i) =>
-            `${i === values.length - 1 ? "and " : ""}\`${getTypeName(v)}\``
-          ).join(", ")
-        }`
-        : `value of type \`${getTypeName(value)}\``;
-
-      throw new TypeError(
-        `Assertion Failure: Expected value of \`${message}\` but received ${msg}.`,
-      );
-    }
-  } as Partial<Assert>,
+  is.assertType as Partial<Assert>,
   Assertions as unknown as Assert,
 ) as Assert;
 
-interface is extends Flatten<typeof is, false> {
+interface is extends Id<typeof is> {
   <T>(value: T): GetTypeName<T>;
-  new (): typeof is;
+  (value: unknown): TypeName;
   assert: Assert;
 }
 
-const isTarget = Object.assign(
-  is,
-  function is<T>(value: T) {
-    return getTypeName<T>(value) as GetTypeName<T>;
+type DeprecatedMethods = `${"null" | "function" | "class"}_`;
+type ExcludedMethods =
+  | DeprecatedMethods
+  | "assert"
+  | "assertType"
+  | "prototype"
+  | "constructor"
+  | "arguments"
+  | "caller"
+  | "callee"
+  | "name"
+  | "typeName"
+  | "not"
+  | "negated"
+  | typeof Symbol.toStringTag
+  | typeof IsNegated
+  | typeof DenoCustomInspect;
+
+const _excludedMethods = [
+  ...Reflect.ownKeys(Function.prototype),
+  "null_",
+  "function_",
+  "class_",
+  "not",
+  "typeName",
+  "assert",
+  "assertType",
+] as const;
+
+type TypeChecks = NonNullable<
+  ConditionalExcept<
+    Except<is, Extract<ExcludedMethods, keyof is>>,
+    never | null | undefined
+  >
+>;
+
+type TypeCheckNames = keyof TypeChecks;
+
+// deno-fmt-ignore
+type Args<T> = (
+  | T extends ((...a: infer P extends any[]) => any) ? P 
+  : T extends (abstract new (...a: infer P extends any[]) => any) ? P 
+  : never[]
+);
+
+type NegatedMethods<
+  Base,
+  Keys extends keyof Base = keyof Base,
+> = Flatten<
+  ConditionalExcept<
+    {
+      [K in Keys as Filter<K, ExcludedMethods | symbol>]:
+        ((...args: Args<Base[K]>) => boolean);
+    },
+    never
+  >
+>;
+
+// deno-fmt-ignore
+interface isnt extends NegatedMethods<TypeChecks> {
+  [IsNegated]: boolean;
+  /* negated interface */
+  (value: unknown): boolean;
+}
+
+type Id<U> = U extends infer T extends Record<string, any> | unknown[] ? {
+    [K in keyof T]: T[K] extends
+      Record<string | symbol | number, unknown> | unknown[] ? Id<T[K]> : T[K];
+  }
+  : U;
+
+// formatPropertyDescriptors(is as unknown as is, { sealed: false });
+
+// function createNegated<T extends is, U extends isnt>(this: T): {
+//   proxy: U;
+// };
+
+interface CreateNegatedOptions {
+  /** Names/Symbols of properties to exclude from the proxied object. */
+  excluded?: (string | symbol)[];
+
+  /**
+   * Custom value to use for the `Symbol.toStringTag` property.
+   * @default "is.not"
+   */
+  toStringTag?: string;
+
+  /**
+   * Create a revocable negated object using `Proxy.revocable`. This returns an
+   * additional property alongside `proxy` (named `revoke`), which will destroy
+   * the proxy instance and free it for garbage collection once it is invoked.
+   *
+   * **Note**: Proxy revocation is a one-way operation. It cannot be undone.
+   * @see https://mdn.io/Proxy.revocable
+   * @default false
+   */
+  revocable?: boolean;
+
+  /**
+   * Rename proxied functions for methods and getters/setters. Helps the final
+   * object appear slightly more indistinguishable from the original target.
+   * @default true
+   */
+  maskMethodNames?: boolean;
+
+  /**
+   * Sort the proxied method names in ascending alphabetic order.
+   */
+  sorted?: boolean;
+}
+
+interface RevocableNegatedOptions extends CreateNegatedOptions {
+  revocable: true;
+}
+
+function createNegated<
+  T extends is | Assert | typeof is | typeof Assertions,
+  U extends isnt,
+>(
+  this: T,
+): { proxy: U };
+function createNegated<
+  T extends is | Assert | typeof is | typeof Assertions,
+  U extends isnt,
+>(
+  this: T,
+  options: RevocableNegatedOptions,
+): { proxy: U; revoke: () => void };
+function createNegated<
+  T extends is | Assert | typeof is | typeof Assertions,
+  U extends isnt,
+>(
+  this: T,
+  options?: CreateNegatedOptions,
+): { proxy: U };
+function createNegated<
+  T extends is | Assert | typeof is | typeof Assertions,
+  U extends isnt,
+>(
+  this: T,
+  options: CreateNegatedOptions = {
+    revocable: false,
+    maskMethodNames: true,
   },
-  { assert: assert as Assert },
-) as unknown as is;
+): any {
+  options.sorted ??= true;
+  options.maskMethodNames ??= true;
+  options.toStringTag ??= "is.not";
+  options.excluded ??= [
+    // "assert",
+    // "assertType",
+    "typeName",
+    "negated",
+    "namespaceModule",
+  ];
+  // properties to exclude from the returned object
+  const deprecatedProperties = Reflect.ownKeys(
+    Reflect.get(this, IsDeprecated, this),
+  ).filter(is.nonEmptyStringAndNotWhitespace);
 
-formatPropertyDescriptors(isTarget, { sealed: true, hideDeprecated: true });
+  const excluded = Array.from(
+    new Set([
+      "not",
+      ...options?.excluded,
+      IsDeprecated,
+      DenoCustomInspect,
+      ...deprecatedProperties,
+    ]),
+  );
 
-// We're proxying the `is` and `assert` classes combined with the `getTypeName`
-// function, to allow for the following pattern:
-//
-// ```ts
-// import { is } from "https://deno.land/x/dis/mod.ts";
-//
-// is("🦕") // => "string"
-// is(100n) // => "bigint"
-// is.bigint(100n) // => true
-// is.assert.bigint(100) // => throws TypeError
-// ```
+  /**
+   * Handle the results of one of the typecheck / assertion methods, applying
+   * the negation modifier whenever it seems appropriate.
+   */
+  function handleResult(
+    this: any,
+    target: any,
+    args: unknown[],
+    result: unknown,
+  ) {
+    if (is.function(result) && !is.promise(result)) {
+      result = result.apply(target, args);
+    }
+
+    if (is.promise(result)) {
+      return result.then((result) => {
+        if (is.boolean(result) && this[IsNegated]) {
+          this[IsNegated] = false;
+          return !result;
+        }
+        return result;
+      });
+    }
+    if (is.boolean(result) && this[IsNegated]) {
+      this[IsNegated] = false;
+      return !result;
+    }
+    return result;
+  }
+
+  /** Check if a property is marked for exclusion from the proxy. */
+  function isExcluded(property: string | symbol): boolean {
+    if (is.symbol(property)) {
+      return excluded.includes(property);
+    }
+
+    return excluded.some((pattern) =>
+      !is.symbol(pattern) && new RegExp(pattern).test(property)
+    );
+  }
+
+  // return (revocable ? Proxy.revocable : new Proxy)(this as unknown as U,
+  const handler: ProxyHandler<U> = {
+    get(target, p, receiver) {
+      if (isExcluded(p)) {
+        return undefined;
+      }
+
+      if (p === Symbol.toStringTag) {
+        return options.toStringTag ?? "is.not";
+      }
+
+      // equivalent to `value = target[p];`
+      let value = Reflect.get(target, p, target);
+      value ??= Reflect.get(target, p, receiver);
+      value ??= Reflect.getOwnPropertyDescriptor(target, p)?.value;
+
+      if (is.function(value)) {
+        const proxiedMethod = function proxiedMethod(
+          this: any,
+          ...args: any[]
+        ) {
+          const result = (value as Function).apply(
+            this === receiver ? target : this,
+            args,
+          );
+          return handleResult.call(
+            this === receiver ? target : this,
+            target,
+            args,
+            result,
+          );
+        };
+
+        if (options?.maskMethodNames) {
+          renameFunction(proxiedMethod, p);
+        }
+        return proxiedMethod;
+      }
+      // otherwise...
+      return value;
+    },
+    getOwnPropertyDescriptor(target, p) {
+      if (excluded.includes(p)) {
+        return undefined;
+      }
+      const desc = Reflect.getOwnPropertyDescriptor(target, p);
+      // sanity check
+      if (is.propertyDescriptor(desc)) {
+        if (is.dataDescriptor(desc)) {
+          if (is.function(desc.value)) {
+            const value = desc.value;
+
+            const valueProxy = function valueProxy(this: any, ...args: any[]) {
+              const result = value.apply(target, args);
+              return handleResult.call(target, this, args, result);
+            };
+
+            if (options?.maskMethodNames) renameFunction(valueProxy, p);
+            desc.value = valueProxy;
+          }
+        } else if (is.accessorDescriptor(desc) && is.function(desc.get)) {
+          const get = desc.get;
+
+          const getterProxy = function getterProxy() {
+            const result = get.apply(target);
+            return handleResult.call(target, target, [], result);
+          };
+
+          if (options?.maskMethodNames) {
+            renameFunction(getterProxy, p);
+          }
+          desc.get = getterProxy;
+        }
+        return desc;
+      }
+    },
+    ownKeys(target) {
+      let keys: Set<string | symbol> | (string | symbol)[] = new Set(
+        Reflect.ownKeys(target).filter((key) => !excluded.includes(key)),
+      ).add(Symbol.toStringTag);
+
+      keys = [...keys] as (string | symbol)[];
+      return options?.sorted
+        ? keys.sort((a, b) =>
+          String((a as symbol)?.description ?? a).localeCompare(
+            String((b as symbol)?.description ?? b),
+          )
+        )
+        : keys;
+    },
+  };
+
+  return options?.revocable
+    ? Proxy.revocable(this as unknown as U, handler)
+    : { proxy: new Proxy(this as unknown as U, handler) };
+}
 
 /**
  * Determine the {@linkcode TypeName} of an arbitrary value of unknown type.
@@ -2179,6 +2472,7 @@ formatPropertyDescriptors(isTarget, { sealed: true, hideDeprecated: true });
  * is({ foo: "bar" }) // => "Object"
  * is(new Uint8Array()) // => "Uint8Array"
  * ```
+ *
  * @example
  * ```ts
  * import { is, assert } from "https://deno.land/x/dis/mod.ts";
@@ -2195,60 +2489,159 @@ formatPropertyDescriptors(isTarget, { sealed: true, hideDeprecated: true });
  * // => Unexpected TypeError: ...
  * ```
  */
-const $is: is = new Proxy<is>(isTarget, {
-  apply(
-    _: is,
-    thisArg,
-    argArray = [undefined],
-  ): ReturnType<typeof getTypeName> {
-    return getTypeName.apply(
-      thisArg,
-      argArray as Parameters<typeof getTypeName>,
-    );
+// @ts-ignore janky re-assignment
+is = new Proxy<is>(is as unknown as is, {
+  apply<T = unknown>(
+    _target: is,
+    _thisArg: any,
+    args: [value: T],
+  ): GetTypeName<T> {
+    return getTypeName(args[0] as T) as GetTypeName<T>;
   },
-  construct(_t, _a, newTarget) {
-    throw new TypeError(
-      `Cannot create a new instance of ${newTarget.name} using \`new\` operator. Use the syntax \`is(value)\`, \`is.assert(condition)\`, or \`is.{type}(value)\` instead.`,
+  construct(target, args, newTarget) {
+    console.warn(
+      [
+        `Warning: improper usage of the \`new\` operator. The \`is\` module is a static class and cannot be instantiated in prototype form.`,
+        " ",
+        `Instead, try one of these supported syntax examples:`,
+        ` • is(value: unknown) => TypeName`,
+        ` • is.assert(expr: boolean, msg?: string) => asserts expr`,
+        ` • is.string(value: unknown) => value is string`,
+        ` • is.not.string(value: unknown) => boolean`,
+      ].join("\n"),
     );
+
+    return Reflect.apply(target, newTarget, args) as unknown as is;
   },
   get(target, p, receiver) {
     switch (p) {
+      case "name":/* fall through */
       case Symbol.toStringTag:
         return "is";
       case "assert":/* fall through */
-        return assert;
-      case "asserts":
-        return assert;
+      case "asserts": {
+        // proxied to handle the .not operator
+        return new Proxy(assert, {
+          get(target, p, _receiver) {
+            if (p === "not") {
+              Reflect.set(target, IsNegated, true, target);
+              return createNegated.call(assert, {
+                revocable: false,
+                sorted: true,
+                excluded: ["assert"],
+                maskMethodNames: true,
+              }).proxy;
+            }
+            return Reflect.get(target, p, target);
+          },
+          ownKeys(target) {
+            return [...Reflect.ownKeys(target), "not"];
+          },
+        });
+      }
+      case "not": {
+        Reflect.set(target, IsNegated, true, target);
+        return createNegated.call(target, {
+          revocable: false,
+          sorted: true,
+          excluded: ["assert"],
+          maskMethodNames: true,
+        }).proxy;
+      }
       default:
         return Reflect.get(target, p, receiver);
     }
   },
-  set(target, p, value, receiver) {
-    return Reflect.set(target, p, value, receiver);
-  },
   ownKeys(target) {
-    return Reflect.ownKeys(target);
+    const excluded = [
+      "assertType",
+      DenoCustomInspect,
+    ];
+
+    const keys = Array.from(
+      new Set(
+        Reflect.ownKeys(target).filter((key) => !excluded.includes(key)),
+      ),
+    );
+
+    return keys.toSorted((a, b) =>
+      String((a as symbol)?.description ?? a).localeCompare(
+        String((b as symbol)?.description ?? b),
+      )
+    );
   },
   getOwnPropertyDescriptor(target, p) {
-    return Reflect.getOwnPropertyDescriptor(target, p);
-  },
-  isExtensible(t) {
-    return Reflect.isExtensible(t);
-  },
-  preventExtensions(t) {
-    return Reflect.preventExtensions(t);
-  },
-  defineProperty(t, p, a) {
-    return Reflect.defineProperty(t, p, a);
-  },
-  deleteProperty() { // (t, p) {
-    // return Reflect.deleteProperty(t, p);
-    return false;
+    const desc = Reflect.getOwnPropertyDescriptor(target, p) ?? {};
+
+    if (isDeprecated(target, p) || is.symbol(p)) {
+      return { ...desc, enumerable: false };
+    }
+    return desc;
   },
 }) as is;
 
-Reflect.defineProperty($is, Symbol.toStringTag, { value: "is" });
+/**
+ * Determine the {@linkcode TypeName} of an arbitrary value of unknown type.
+ *
+ * @example
+ * ```ts
+ * import { is } from "https://deno.land/x/dis/mod.ts";
+ *
+ * getTypeName("🦕") // => "string"
+ * getTypeName(100n) // => "bigint"
+ * getTypeName({ foo: "bar" }) // => "Object"
+ * getTypeName(new Uint8Array()) // => "Uint8Array"
+ * ```
+ */
+function getTypeName<T = unknown>(value: T) {
+  return ((value: unknown) => {
+    if (value === null) {
+      return "null";
+    }
 
-export { $is as default, $is as is, assert };
+    switch (typeof value) {
+      case "undefined":
+        return "undefined";
+      case "string":
+        return "string";
+      case "number":
+        return Number.isNaN(value) ? "NaN" : "number";
+      case "boolean":
+        return "boolean";
+      case "function":
+        return "Function";
+      case "bigint":
+        return "bigint";
+      case "symbol":
+        return "symbol";
+      default:
+    }
 
-export type { Assert, TypeName };
+    if (is.observable(value)) {
+      return "Observable";
+    }
+
+    if (is.array(value)) {
+      return "Array";
+    }
+
+    if (is.nodeBuffer(value)) {
+      return "Buffer";
+    }
+
+    if (is.denoBuffer(value)) {
+      return "Buffer";
+    }
+
+    if (is.boxedPrimitive(value)) {
+      throw new TypeError(
+        "Please don't use object wrappers for primitive types",
+      );
+    }
+
+    return getObjectType(value) ?? "Object";
+  })(value) as GetTypeName<T>;
+}
+
+export default is as unknown as is;
+export { type Assert, assert, type GetTypeName, is, type TypeName };
