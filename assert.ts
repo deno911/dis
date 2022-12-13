@@ -2,17 +2,16 @@ import { Buffer, NodeJS } from "./types.ts";
 import type {
   AccessorDescriptor,
   Class,
+  ConditionalExcept,
   DataDescriptor,
   MapIterator,
   Module,
   ObservableLike,
-  PartialByKeys,
   Predicate,
   Primitive,
   SetIterator,
   TypedArray,
 } from "./types.ts";
-import { is } from "./is.ts";
 
 export enum AssertionTypeDescription {
   class_ = "Class",
@@ -182,11 +181,10 @@ export interface assert {
   dataDescriptor: <T = unknown>(
     value: unknown,
   ) => asserts value is DataDescriptor<T>;
-  exact: <T extends Record<string, unknown>, U extends T>(
-    value: unknown,
+  exact: <T>(
     shape: T,
-  ) => asserts value is U;
-
+    value: unknown,
+  ) => asserts value is T;
   /**
    * Determines if an object is a **subset** of another (the "shape" object).
    * The target object **may not** have any keys that aren't present in the
@@ -216,8 +214,8 @@ export interface assert {
    * ```
    */
   subset: <T extends Record<string, unknown>>(
-    value: unknown,
     shape: T,
+    value: unknown,
   ) => asserts value is {
     [K in keyof T as (typeof value)[K] extends never ? never : K]: unknown;
   };
@@ -253,8 +251,8 @@ export interface assert {
    * ```
    */
   superset: <T extends Record<string, unknown>>(
-    value: unknown,
     shape: T,
+    value: unknown,
   ) => asserts value is { [K in keyof T | string]: unknown };
   key: <T extends readonly unknown[] | Record<PropertyKey, unknown> = {}>(
     value: unknown,
@@ -362,52 +360,55 @@ export interface AssertOptions {
   multipleValues?: boolean;
 }
 
-type DeprecatedMethods = ""; // `${"null" | "function" | "class"}_`;
-type ExcludedMethods =
-  | DeprecatedMethods
-  | "assert"
-  | "prototype"
-  | "constructor"
-  | "arguments"
-  | "caller"
-  | "callee"
-  | "name";
-
-type is = Required<typeof is>;
-type TypeCheckNames = Exclude<keyof is, ExcludedMethods>;
-type TypeCheckMethods = is[TypeCheckNames];
+export type AssertionToTypeCheck<
+  Source,
+  Keys extends keyof Source = keyof Source,
+> = ConditionalExcept<
+  {
+    [K in Keys]: Source[K] extends ((
+      value: unknown,
+      ...args: infer A extends unknown[]
+    ) => asserts value is infer Type)
+      ? ((value: unknown, ...args: A) => value is Type)
+      : Source[K] extends (
+        (
+          value: unknown,
+          ...args: infer Args extends unknown[]
+        ) => asserts value is infer Type
+      ) ? ((value: unknown, ...args: Args) => value is Type)
+      : never;
+  },
+  never
+>;
 
 // assemble a list of assertions based on the available is.{method} typechecks
 // (with a teeny bit of inference magic to extract types for args and return)
-type CreateAssertionMethods<
+export type TypeChecksToAssertions<
   Source,
-  Keys extends keyof Source,
-  Optional extends Keys = never,
-> = PartialByKeys<
+  Keys extends keyof Source = keyof Source,
+> = ConditionalExcept<
   {
     [K in Keys]: (
       Source[K] extends (
-        (value: unknown, ...args: infer A extends unknown[]) => value is infer R
+        (value: unknown) => value is infer R
       ) ? (
-          (value: unknown, ...rest: A) => asserts value is R
+          (value: unknown) => asserts value is R
         )
+        : Source[K] extends (
+          (
+            value: unknown,
+            ...args: infer Rest extends unknown[]
+          ) => value is infer R
+        ) ? (
+            (value: unknown, ...args: Rest) => asserts value is R
+          )
+        : Source[K] extends (
+          (other: infer Other, value: unknown) => value is infer R
+        ) ? ((other: Other, value: unknown) => asserts value is R)
         : never
     );
   },
-  Optional
->;
-
-export type AssertionMethods = Omit<
-  CreateAssertionMethods<is, TypeCheckNames>,
-  | "regex"
-  | "fn"
-  | "falsey"
-  | "module"
-  | "nodeBuffer"
-  | "denoBuffer"
-  | "NaN"
-  | "numeric"
-  | "boxedPrimitive"
+  never
 >;
 
 export interface Assert extends assert {
