@@ -154,7 +154,7 @@ export interface Module {
     default?: unknown;
   };
   default?: unknown;
-  readonly __esModule: boolean;
+  readonly __esModule?: true;
   readonly [Symbol.toStringTag]: "Module";
 }
 
@@ -216,6 +216,15 @@ export type AsyncFunction<T extends any = any> = <U extends T>(
   ...args: any[]
 ) => Promise<U>;
 
+export interface RGB {
+  r: number;
+  g: number;
+  b: number;
+}
+export interface RGBA extends RGB {
+  a: number;
+}
+
 // numeric
 
 export type Zero = 0 | 0n;
@@ -223,6 +232,62 @@ export type PositiveInfinity = 1e999;
 export type NegativeInfinity = -1e999;
 export type Infinity = PositiveInfinity | NegativeInfinity;
 export type Numeric = bigint | number | `${bigint}` | `${number}`;
+
+type Digit =
+  | 0
+  | 1
+  | 2
+  | 3
+  | 4
+  | 5
+  | 6
+  | 7
+  | 8
+  | 9;
+
+export type Printable = string | number | bigint | boolean | null | undefined;
+
+export type NormalizeNumber<
+  N extends Printable,
+  T extends Printable = ParseInt<N>,
+  I extends unknown[] = [],
+> = `${T}` extends `${infer A}${infer B}` ? `${A extends
+    | Digit
+    | `${Digit}`
+    | (
+      I["length"] extends 0 ? "-" /* allow negative for first digit only */
+        : never
+    ) ? A
+    : never}${NormalizeNumber<B, ParseInt<B>, [...I, unknown]>}`
+  : T;
+
+export type NumberToBigInt<T extends Printable> = `${T}` extends
+  `${infer N extends bigint}` ? N : T;
+
+export type ParseInt<T extends Printable> = `${T}` extends
+  `${infer N extends number}` ? `${N}` extends `${bigint}` ? N
+  : `${N}` extends `${infer MSB}.${infer _}` ? ParseInt<MSB>
+  : N
+  : T;
+
+// deno-fmt-ignore
+export type IsNaN<T extends Printable & {}, Strict = true> =
+  | `${T}` extends `-${infer A extends number}` ? IsNaN<A>
+  : `${T}` extends `${NormalizeNumber<Infinity>}` ? false
+  : `${ParseInt<T>}` extends `${number}`
+    ? [NormalizeNumber<T>] extends [never]
+      ? true
+    : false
+  : [T] extends [Infinity] ? false
+  : Strict extends true ? never : true;
+
+export type NumberIsNaN<T extends Numeric> = IsNaN<T>;
+
+// deno-fmt-ignore
+export type IsInfinity<T extends Numeric> =
+  | [T] extends [Infinity] ? true
+  : `${ParseInt<T>}` extends Infinity ? true
+  : false;
 
 /**
  * @category Numeric

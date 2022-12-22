@@ -27,6 +27,7 @@ import type {
   ObservableLike,
   Predicate,
   Primitive,
+  RGB,
   SetIterator,
   SubsetOf,
   SupersetOf,
