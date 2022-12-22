@@ -1,4 +1,13 @@
 {
+  "importMap": "./import_map.json",
+  "tasks": {
+    "test": "deno test --unstable --allow-all --import-map=import_map.json",
+    "test-watch": "deno test --unstable --allow-all --import-map=import_map.json --watch",
+    "test-coverage": "deno test --unstable --allow-all --coverage=coverage --import-map=import_map.json && deno coverage --unstable --lcov coverage > coverage.lcov",
+    "lint": "deno lint --unstable --import-map=import_map.json",
+    "format": "deno fmt --unstable --import-map=import_map.json",
+    "format-check": "deno fmt --unstable --import-map=import_map.json --check"
+  },
   "compilerOptions": {
     "lib": [
       "deno.ns",
@@ -7,13 +16,19 @@
       "dom.iterable"
     ],
     "types": [
-      "./types.ts"
-    ]
+      "./types.ts",
+      "./_util/types.d.ts",
+      "./_util/typenames.ts"
+    ],
+    "emitDecoratorMetadata": true,
+    "strictPropertyInitialization": false,
+    "suppressImplicitAnyIndexErrors": true
   },
   "fmt": {
     "files": {
       "exclude": [
-        ".vscode"
+        ".vscode",
+        ".github"
       ]
     },
     "options": {
@@ -29,5 +44,6 @@
         "ban-types"
       ]
     }
-  }
+  },
+  "lock": false
 }

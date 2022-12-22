@@ -17,3 +17,5 @@ node
 deno.lock
 _mod.ts
 _descriptors.json
+__*
+!__test__

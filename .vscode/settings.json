@@ -17,5 +17,6 @@
     "https://x.nest.land": true
   },
   "deno.suggest.names": true,
-  "deno.suggest.completeFunctionCalls": true
+  "deno.suggest.completeFunctionCalls": true,
+  "github-actions.workflows.pinned.refresh.enabled": true
 }

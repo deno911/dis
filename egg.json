@@ -1,23 +1,23 @@
 {
-  "$schema": "https://x.nest.land/eggs@0.3.10/src/schema.json",
+  "$schema": "https://deno.land/x/eggs/src/schema.json",
   "name": "dis",
+  "version": "0.3.0-rc.3",
   "entry": "./mod.ts",
   "description": "Extensive collection of Typeguards and Assertions 🦕",
   "homepage": "https://github.com/deno911/dis",
-  "version": "0.3.0-rc.2",
+  "repository": "https://github.com/deno911/dis",
   "releaseType": false,
   "unstable": true,
-  "unlisted": true,
+  "unlisted": false,
   "files": [
     "./is.ts",
     "./assert.ts",
-    "./mod.ts",
     "./node.d.ts",
     "./types.ts",
     "./deps.ts",
     "./deno.jsonc",
     "./_util.ts",
-    "./_util/*",
+    "./_util/**/*",
     "./LICENSE",
     "./README.md"
   ],
@@ -32,6 +32,5 @@
   "checkTests": false,
   "checkInstallation": false,
   "check": true,
-  "checkAll": true,
-  "repository": "https://github.com/deno911/dis"
+  "checkAll": true
 }
