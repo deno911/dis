@@ -36,6 +36,8 @@ import type {
 } from "./types.ts";
 
 import {
+  createNegated,
+  DenoCustomInspect,
   deprecated,
   enumerable,
   getObjectType,
@@ -43,55 +45,72 @@ import {
   isDeprecated,
   isDomElement,
   isElement,
+  IsNegated,
   isObjectOfType,
   isOfType,
   isPrimitiveTypeName,
   isSvgElement,
   isTypedArrayName,
   isValidLength,
-  MetadataKey,
   predicateOnArray,
-  renameFunction,
-} from "./_util.ts";
+} from "~/_util.ts";
 
-import { type Assert, AssertionTypeDescription } from "./assert.ts";
+import { type Assert as IAssert, AssertionTypeDescription } from "~/assert.ts";
 
-const IsNegated = Symbol.for(MetadataKey.Negated);
-const IsDeprecated = Symbol.for(MetadataKey.Deprecated);
-const DenoCustomInspect = Symbol.for("Deno.customInspect");
+const { assign } = Object;
+
+const $options = Symbol.for("is.options");
+
+interface IsOptions extends Record<string, unknown> {
+  negated: boolean;
+  inspect: Partial<Deno.InspectOptions>;
+}
 
 /**
  * Check if a value is a given type, or retrieve its {@linkcode TypeName}.
  * @param value The value to check
  */
 class is {
-  static get [IsNegated](): boolean {
-    return Reflect.getOwnPropertyDescriptor(this, "__negated")?.value ?? false;
+  @enumerable(false)
+  private static [$options] = {
+    negated: false,
+    inspect: {
+      colors: true,
+      compact: true,
+      depth: 1,
+      getters: true,
+      showHidden: false,
+      showProxy: false,
+      sorted: true,
+      trailingComma: true,
+    } as Deno.InspectOptions,
+  };
+
+  @enumerable(false)
+  static get $options(): IsOptions {
+    return this[$options];
   }
 
-  static set [IsNegated](value: boolean) {
-    Reflect.defineProperty(this, "__negated", {
-      configurable: true,
-      enumerable: false,
-      writable: false,
-      value,
-    });
+  static set $options(value: Record<string, unknown>) {
+    this[$options] = Object.assign(this[$options], value);
   }
 
   @enumerable(true)
-  static get not() {
-    return createNegated.call(this as unknown as is, {
+  public static get not() {
+    this.$options.negated = true;
+
+    return createNegated<is, isnt>(this as unknown as is, {
       revocable: false,
       sorted: true,
       maskMethodNames: true,
       toStringTag: "is.not",
-      excluded: ["__negated"],
+      excluded: ["not", "assert", IsNegated, "$options", "__negated"],
     }).proxy as unknown as isnt;
   }
 
   @enumerable(false)
   static assertType<
-    Negated extends boolean = false,
+    Negated extends boolean = (typeof is.$options.negated),
     Expected extends boolean = (Negated extends true ? false : true),
   >(
     condition: boolean,
@@ -102,26 +121,27 @@ class is {
       negated?: Negated;
     } = {
       multipleValues: false,
-      negated: is[IsNegated] as Negated,
+      negated: (is.$options.negated) as Negated,
     },
-  ): asserts condition is Negated extends true ? false : true {
+  ): asserts condition is Expected {
     const { multipleValues, negated } = options;
 
     if (negated === true) {
       description = `not ${description}`;
       condition = !condition;
-      is[IsNegated] = false;
     }
+
+    is.$options.negated &&= false;
 
     if (!condition) {
       const values = [...new Set([value as any].flat())];
       const msg = multipleValues
         ? `values of types ${
           values.map((v, i) =>
-            `${i === values.length - 1 ? "and " : ""}\`${is.typeName(v)}\``
+            `${i === values.length - 1 ? "and " : ""}\`${getTypeName(v)}\``
           ).join(", ")
         }`
-        : `value of type \`${is.typeName(value)}\``;
+        : `value of type \`${getTypeName(value)}\``;
 
       throw new TypeError(
         `Assertion Failure: Expected value \`${description}\`${
@@ -131,9 +151,7 @@ class is {
     }
   }
 
-  static get assert(): Assert {
-    return assert as Assert;
-  }
+  static assert: Assert;
 
   // --------- //
 
@@ -157,17 +175,8 @@ class is {
     return isOfType<symbol>("symbol")(value);
   };
 
-  public static array = <T = unknown>(
-    value: unknown,
-    assertion?: (value: T) => value is T,
-  ): value is T[] => {
-    if (!Array.isArray(value)) return false;
-    if (!is.function(assertion)) return true;
-    return value.every(assertion);
-  };
-
   /** Check if a value is `null`, using strict equality comparison. */
-  public static null = (value: unknown): value is null => value === null;
+  static null = (value: unknown): value is null => value === null;
 
   static undefined = function (value: unknown): value is undefined {
     return isOfType<undefined>("undefined")(value);
@@ -209,7 +218,7 @@ class is {
     return is.null(value) || isPrimitiveTypeName(typeof value);
   };
 
-  public static boxedPrimitive = (value: unknown): boolean => {
+  static boxedPrimitive = (value: unknown): boolean => {
     if (!is.object(value)) return false;
     const typeName = toString.call(value).slice(8, -1);
     return (
@@ -255,6 +264,7 @@ class is {
    * Alias for `is.falsy`.
    * @see {@link is.falsy}
    */
+  @enumerable(false)
   static falsey = function falsey<T>(value: T | Falsy): value is Falsy {
     return !value;
   };
@@ -273,27 +283,10 @@ class is {
     return is.function((value as Iterable<T>)?.[Symbol.iterator]);
   };
 
-  static generator = function generator(value: unknown): value is Generator {
-    return is.iterable(value) && is.function((value as Generator)?.next) &&
-      is.function((value as Generator)?.throw);
-  };
-
   static generatorFunction = function generatorFunction(
     value: unknown,
   ): value is GeneratorFunction {
     return isObjectOfType<GeneratorFunction>("GeneratorFunction")(value);
-  };
-
-  static asyncFunction = function asyncFunction<T = unknown>(
-    value: unknown,
-  ): value is (...args: any[]) => Promise<T> {
-    return getObjectType(value) === "AsyncFunction";
-  };
-
-  static asyncIterable = function asyncIterable<T = unknown>(
-    value: unknown,
-  ): value is AsyncIterable<T> {
-    return is.function((value as AsyncIterable<T>)?.[Symbol.asyncIterator]);
   };
 
   static asyncGenerator = function asyncGenerator(
@@ -306,9 +299,50 @@ class is {
 
   static asyncGeneratorFunction = function asyncGeneratorFunction(
     value: unknown,
-  ): value is (...args: any[]) => Promise<unknown> {
-    return getObjectType(value) === "AsyncGeneratorFunction";
+  ): value is AsyncGeneratorFunction {
+    return isObjectOfType<AsyncGeneratorFunction>("AsyncGeneratorFunction")(
+      value,
+    );
   };
+
+  static generator = assign(
+    function generator(value: unknown): value is Generator {
+      return is.iterable(value) && is.function((value as Generator)?.next) &&
+        is.function((value as Generator)?.throw);
+    },
+    {
+      function: assign({}, is.generatorFunction, {
+        async: is.asyncGeneratorFunction,
+      }),
+      async: is.asyncGenerator,
+    },
+  );
+
+  static asyncFunction = function asyncFunction<T = unknown>(
+    value: unknown,
+  ): value is AsyncFunction<T> {
+    const AsyncFunction = ((async function () {}).constructor) as AsyncFunction;
+
+    return is.function(value) && (
+      (value instanceof AsyncFunction) ||
+      isObjectOfType<AsyncFunction>("AsyncFunction")(value)
+    );
+  };
+
+  static asyncIterable = function asyncIterable<T = unknown>(
+    value: unknown,
+  ): value is AsyncIterable<T> {
+    return is.function((value as AsyncIterable<T>)?.[Symbol.asyncIterator]);
+  };
+
+  static async = assign({}, {
+    function: is.asyncFunction,
+    generator: assign({}, is.asyncGenerator, {
+      function: is.asyncGeneratorFunction,
+    }),
+    generatorFunction: is.asyncGeneratorFunction,
+    iterable: is.asyncIterable,
+  });
 
   static boundFunction = function boundFunction(
     value: unknown,
@@ -369,6 +403,7 @@ class is {
     return isObjectOfType<RegExp>("RegExp")(value);
   };
 
+  @enumerable(false)
   static regex = function regex(value: unknown): value is RegExp {
     return isObjectOfType<RegExp>("RegExp")(value);
   };
