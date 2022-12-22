@@ -13,6 +13,21 @@ export interface ArrayAssertion<T = unknown> {
   (element: unknown, index: number, array: T[]): asserts element is T;
 }
 
+export type SubsetOf<T, V = unknown, U extends T = T> = {
+  [K in keyof T as U[K] extends never ? never : K]: V;
+};
+
+export type SupersetOf<T, V = unknown> = {
+  [K in keyof T | string]: V;
+};
+
+export type ExactShapeOf<T> = {
+  [K in keyof T]: T[K];
+};
+
+export type IsAny<T, Y = true, N = false> = 0 extends (1 & T) ? Y : N;
+export type NotAny<T, Y = true, N = false> = true extends IsAny<T> ? N : Y;
+
 /**
  * Matches a `class` constructor.
  * @see https://mdn.io/Classes.
@@ -79,22 +94,67 @@ export type TypedArray =
   | BigUint64Array;
 
 // built-ins
-export type MapIterator<K = unknown, V = unknown> = IterableIterator<[K, V]>;
-export type SetIterator<T = unknown> = IterableIterator<T>;
+
+// deno-fmt-ignore
+export interface MapIterator<T = [unknown, unknown]> extends
+  IterableIterator<T> {
+    readonly [Symbol.toStringTag]?: "Map Iterator";
+}
+
+// deno-fmt-ignore
+export interface SetIterator<T = unknown> extends IterableIterator<T> {
+  readonly [Symbol.toStringTag]?: "Set Iterator";
+}
+
+// deno-fmt-ignore
+export interface StringIterator extends IterableIterator<string> {
+  readonly [Symbol.toStringTag]?: "String Iterator";
+}
+
+// deno-fmt-ignore
+export interface ArrayIterator<T = unknown> extends IterableIterator<T> {
+  readonly [Symbol.toStringTag]?: "Array Iterator";
+}
+
+declare global {
+  interface Set<T> {
+    keys(): SetIterator<T>;
+    values(): SetIterator<T>;
+    entries(): SetIterator<[T, T]>;
+    [Symbol.iterator](): SetIterator<T>;
+  }
+  interface Map<K, V> {
+    keys(): MapIterator<K>;
+    values(): MapIterator<V>;
+    entries(): MapIterator<[K, V]>;
+    [Symbol.iterator](): MapIterator<[K, V]>;
+  }
+  interface String {
+    [Symbol.iterator](): StringIterator;
+  }
+  interface Array<T> {
+    keys(): ArrayIterator<number>;
+    values(): ArrayIterator<T>;
+    entries(): ArrayIterator<[number, T]>;
+    [Symbol.iterator](): ArrayIterator<T>;
+  }
+}
 
 /**
  * Describes the general shape of a JavaScript / TypeScript module that was
  * imported using the namespace syntax, e.g. `import * as is from ...`
  *
+ * @see {@linkcode is.module}
  * @see {@linkcode is.namespaceModule}
  */
 export interface Module {
   [name: string]: unknown;
   exports?: {
     [name: string]: unknown;
+    default?: unknown;
   };
   default?: unknown;
-  readonly __esModule?: boolean;
+  readonly __esModule: boolean;
   readonly [Symbol.toStringTag]: "Module";
 }
 
