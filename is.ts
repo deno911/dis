@@ -416,27 +416,237 @@ class is {
     return isObjectOfType<Error>("Error")(value);
   };
 
-  static map = function map<Key = unknown, Value = unknown>(
+  static mapIterator = function mapIterator<T = [K: unknown, V: unknown]>(
     value: unknown,
-  ): value is Map<Key, Value> {
-    return isObjectOfType<Map<Key, Value>>("Map")(value);
+  ): value is MapIterator<T> {
+    return isObjectOfType<MapIterator<T>>("Map Iterator")(value);
   };
 
-  static set = function set<T = unknown>(value: unknown): value is Set<T> {
-    return isObjectOfType<Set<T>>("Set")(value);
+  static setIterator = function setIterator<T = unknown>(
+    value: unknown,
+  ): value is SetIterator<T> {
+    return isObjectOfType<SetIterator<T>>("Set Iterator")(value);
   };
 
-  static mapIterator = function mapIterator(
-    value: unknown,
-  ): value is MapIterator {
-    return isObjectOfType<MapIterator>("Map Iterator")(value);
+  /**
+   * Check if a value is a `Map` object.
+   * @param value The value to inspect.
+   * @returns `true` if the value is a `Map` object, `false` otherwise.
+   */
+  // deno-fmt-ignore
+  static map: (<K = unknown, V = unknown>(value: unknown) => value is Map<K, V>)
+    & {
+      /**
+       * Check if a value is a `Map Iterator`.
+       *
+       * @param value The value to inspect.
+       * @returns `true` if the value is a `Map Iterator`, `false` otherwise.
+       *
+       * @see {@linkcode is.map} to check if a value is a `Map` object.
+       * @see {@linkcode is.mapIterator} for the standalone version.
+       */
+      readonly iterator: <T = [K: unknown, V: unknown]>(
+        value: unknown,
+      ) => value is MapIterator<T>;
+      readonly empty: (value: unknown) => value is Map<never, never>;
+      readonly nonEmpty: <K, V>(value: unknown) => value is Map<K, V>;
+    };
+
+  /**
+   * Check if a value is a `Set` object.
+   *
+   * @param value The value to inspect.
+   * @returns `true` if the value is a `Set` object, `false` otherwise.
+   */
+  // deno-fmt-ignore
+  static set: (<T = unknown>(value: unknown) => value is Set<T>)
+    & {
+      /**
+       * Check if a value is a `Set Iterator`.
+       *
+       * @param value The value to inspect.
+       * @returns `true` if the value is a `Set Iterator`, `false` otherwise.
+       *
+       * @see {@linkcode is.set} to check if a value is a `Set` object.
+       * @see {@linkcode is.setIterator} for the standalone version.
+       */
+      readonly iterator: (value: unknown) => value is SetIterator;
+      readonly empty: (value: unknown) => value is Set<never>;
+      readonly nonEmpty: (value: unknown) => value is Set<unknown>;
+    };
+
+  // ----------------------------------------------------------------- //
+  //  Emptiness Checks
+  // ----------------------------------------------------------------- //
+  static emptyArray = function emptyArray(value: unknown): value is never[] {
+    return is.array(value) && value.length === 0;
   };
 
-  static setIterator = function setIterator(
-    value: unknown,
-  ): value is SetIterator {
-    return isObjectOfType<SetIterator>("Set Iterator")(value);
+  static emptySet = function emptySet(value: unknown): value is Set<never> {
+    return is.set(value) && value.size === 0;
   };
+
+  static emptyMap = function emptyMap(
+    value: unknown,
+  ): value is Map<never, never> {
+    return is.map(value) && value.size === 0;
+  };
+
+  static emptyObject = function emptyObject<Key extends keyof any = string>(
+    value: unknown,
+  ): value is Record<Key, never> {
+    return is.object(value) && !is.map(value) && !is.set(value) &&
+      Object.keys(value).length === 0;
+  };
+
+  static emptyString = function emptyString(value: unknown): value is "" {
+    return is.string(value) && value.length === 0;
+  };
+
+  static whitespace = function whitespace(value: unknown): value is string {
+    return is.string(value) && !/\S/.test(value);
+  };
+
+  static emptyStringOrWhitespace = function emptyStringOrWhitespace(
+    value: unknown,
+  ): value is string {
+    return is.emptyString(value) || is.whitespace(value);
+  };
+
+  /**
+   * Collection of various emptiness checks. Each of the methods contained is
+   * really just a reference to a standalone static method of the `is` class.
+   * For your convenience they're also provided here as `is.empty.{method}`.
+   *
+   * @see {@linkcode is.emptyArray} - `is.empty.array`
+   * @see {@linkcode is.emptyMap} - `is.empty.map`
+   * @see {@linkcode is.emptyObject} - `is.empty.object`
+   * @see {@linkcode is.emptySet} - `is.empty.set`
+   * @see {@linkcode is.emptyString} - `is.empty.string`
+   * @see {@linkcode is.emptyStringOrWhitespace} - `is.empty.string.or.whitespace` or `is.empty.string.orWhitespace`
+   */
+  static empty = {
+    map: is.emptyMap,
+    set: is.emptySet,
+    array: is.emptyArray,
+    object: is.emptyObject,
+    string: assign({}, is.emptyString, {
+      or: {
+        whitespace: is.emptyStringOrWhitespace,
+      },
+      orWhitespace: is.emptyStringOrWhitespace,
+    }),
+    stringOrWhitespace: is.emptyStringOrWhitespace,
+  };
+
+  // ----------------------------------------------------------------- //
+  //  Non-Emptiness Checks
+  // ----------------------------------------------------------------- //
+
+  static nonEmptyArray = function nonEmptyArray(
+    value: unknown,
+  ): value is [unknown, ...unknown[]] {
+    return is.array(value) && value.length > 0;
+  };
+
+  static nonEmptySet = function nonEmptySet<T = unknown>(
+    value: unknown,
+  ): value is Set<T> {
+    return is.set(value) && value.size > 0;
+  };
+
+  static nonEmptyMap = function nonEmptyMap<K = unknown, V = unknown>(
+    value: unknown,
+  ): value is Map<K, V> {
+    return is.map(value) && value.size > 0;
+  };
+
+  /*
+   * TODO: Use `not` operator here to remove `Map` and `Set` from type guard:
+   * https://github.com/Microsoft/TypeScript/pull/29317
+   */
+  static nonEmptyObject = function nonEmptyObject<
+    K extends keyof any = string,
+    V = unknown,
+  >(
+    value: unknown,
+  ): value is Record<K, V> {
+    return is.object(value) && !is.map(value) && !is.set(value) &&
+      Object.keys(value).length > 0;
+  };
+
+  // TODO: Use `not ''` when the `not` operator is available.
+  static nonEmptyString = function nonEmptyString(
+    value: unknown,
+  ): value is string {
+    return is.string(value) && value.length > 0;
+  };
+
+  static nonEmptyStringAndNotWhitespace =
+    function nonEmptyStringAndNotWhitespace(
+      value: unknown,
+    ): value is string {
+      return is.string(value) && !is.emptyStringOrWhitespace(value);
+    };
+
+  /**
+   * Collection of negated-emptiness checks. Each of the methods contained is
+   * really just a reference to a standalone static method of the `is` class.
+   * For your convenience they're provided here as `is.nonEmpty.{method}`.
+   *
+   * @see {@linkcode is.nonEmptyArray} - `is.nonEmpty.array`
+   * @see {@linkcode is.nonEmptyMap} - `is.nonEmpty.map`
+   * @see {@linkcode is.nonEmptyObject} - `is.nonEmpty.object`
+   * @see {@linkcode is.nonEmptySet} - `is.nonEmpty.set`
+   * @see {@linkcode is.nonEmptyString} - `is.nonEmpty.string`
+   * @see {@linkcode is.nonEmptyStringAndNotWhitespace} - `is.nonEmpty.string.andNotWhitespace` or `is.nonEmpty.string.and.not.whitespace`
+   */
+  static nonEmpty = {
+    array: is.nonEmptyArray,
+    map: is.nonEmptyMap,
+    object: is.nonEmptyObject,
+    set: is.nonEmptySet,
+    string: assign({}, is.nonEmptyString, {
+      or: {
+        whitespace: is.nonEmptyStringAndNotWhitespace,
+      },
+      and: {
+        not: {
+          whitespace: is.nonEmptyStringAndNotWhitespace,
+        },
+      },
+      andNotWhitespace: is.nonEmptyStringAndNotWhitespace,
+    }),
+    nonEmptyStringAndNotWhitespace: is.nonEmptyStringAndNotWhitespace,
+  };
+
+  // ----------------------------------------------------------------- //
+  //  Map
+  // ----------------------------------------------------------------- //
+  static {
+    const map = function map<Key = unknown, Value = unknown>(
+      value: unknown,
+    ): value is Map<Key, Value> {
+      return isObjectOfType<Map<Key, Value>>("Map")(value);
+    };
+    map.iterator = is.mapIterator;
+    map.empty = is.emptyMap;
+    map.nonEmpty = is.nonEmptyMap;
+    is.map = map;
+  }
+
+  // ----------------------------------------------------------------- //
+  //  Set
+  // ----------------------------------------------------------------- //
+  static {
+    const set = function set<T = unknown>(value: unknown): value is Set<T> {
+      return isObjectOfType<Set<T>>("Set")(value);
+    };
+    set.iterator = is.setIterator;
+    set.empty = is.emptySet;
+    set.nonEmpty = is.nonEmptySet;
+    is.set = set;
+  }
 
   static weakMap = function weakMap<
     Key extends object = object,
