@@ -1,8 +1,13 @@
-import { Buffer, Buffer as DenoBuffer, NodeBuffer } from "./deps.ts";
+/// <reference lib="dom" />
+/// <reference lib="deno.ns" />
+/// <reference lib="deno.window" />
+
+import { Buffer, Buffer as DenoBuffer, NodeBuffer } from "~/deps.ts";
 
 import type {
   AccessorDescriptor,
   ArrayAssertion,
+  AsyncFunction,
   Class,
   ConditionalExcept,
   DataDescriptor,
