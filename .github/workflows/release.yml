@@ -1,0 +1,27 @@
+name: "🦕 Release"
+on:
+  push:
+    tags:
+      - "*"
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Continue in case the canary run does not succeed
+    continue-on-error: false
+    steps:
+      - name: "(env) gitconfig"
+        run: |
+          sudo git config --system core.autocrlf false
+          sudo git config --system core.eol lf
+
+      - name: "(env) checkout"
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: "(setup) 🦕 deno"
+        uses: denoland/setup-deno@main
+        with:
+          deno-version: 1.x
+
+      - run: deno run --unstable -A npm:conventional-github-releaser -p angular

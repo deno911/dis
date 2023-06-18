@@ -1,0 +1,29 @@
+$schema: "https://deno.land/x/eggs/src/schema.json"
+name: dis
+version: 0.3.0-rc.3
+entry: ./mod.ts
+description: "Extensive collection of Typeguards and Assertions for Deno🦕"
+homepage: https://github.com/deno911/dis
+repository: https://github.com/deno911/dis
+releaseType: false
+unstable: true
+unlisted: false
+files:
+  - ./*.ts
+  - ./_util/**/*
+  - ./src/**/*
+  - ./deno.jsonc
+  - ./import_map.json
+  - ./LICENSE
+  - ./README.md
+ignore:
+  - ./.github/**/*
+  - ./.vscode/*
+  - ./.gitpod.yml
+  - ./.gitignore
+  - ./*.lock
+checkFormat: true
+checkTests: false
+checkInstallation: false
+check: true
+checkAll: true
